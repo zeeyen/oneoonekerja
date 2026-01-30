@@ -108,9 +108,32 @@ export interface Handover {
   updated_at: string;
 }
 
+// Extended user type for handover details
+export interface HandoverUser {
+  id: string;
+  full_name: string | null;
+  phone_number: string;
+  ic_number?: string | null;
+  location_city?: string | null;
+  location_state?: string | null;
+  preferred_job_types?: string[];
+  preferred_positions?: string[];
+}
+
+// Extended job type for handover details
+export interface HandoverJob {
+  id: string;
+  job_title: string;
+  position: string;
+  location_city?: string | null;
+  location_state?: string | null;
+  hourly_rate?: number | null;
+  whatsapp_group_link?: string | null;
+}
+
 export interface HandoverWithDetails extends Handover {
-  user?: Pick<User, 'full_name' | 'phone_number'>;
-  job?: Pick<Job, 'job_title' | 'position'>;
+  user?: HandoverUser;
+  job?: HandoverJob;
 }
 
 export interface AdminUser {
