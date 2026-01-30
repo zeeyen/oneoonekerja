@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAdminUser } from '@/hooks/useAdminUser';
+import { useAdmin } from '@/contexts/AdminContext';
 import { usePendingHandoversCount } from '@/hooks/usePendingHandoversCount';
 import {
   Sidebar,
@@ -37,13 +37,15 @@ import {
   Settings,
   LogOut,
   ChevronUp,
+  Shield,
+  UserCog,
 } from 'lucide-react';
 
 function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const { isAdmin, fullName } = useAdminUser();
+  const { isAdmin, role, fullName } = useAdmin();
   const { count: pendingCount } = usePendingHandoversCount();
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
@@ -74,9 +76,30 @@ function AppSidebar() {
     { title: 'Conversations', url: '/conversations', icon: MessageSquare },
   ];
 
-  const systemNavItems = [
-    { title: 'Settings', url: '/settings', icon: Settings, adminOnly: true },
-  ].filter(item => !item.adminOnly || isAdmin);
+  // Only show Settings if user is admin
+  const systemNavItems = isAdmin
+    ? [{ title: 'Settings', url: '/settings', icon: Settings }]
+    : [];
+
+  const getRoleBadge = () => {
+    if (role === 'admin') {
+      return (
+        <Badge variant="default" className="text-[10px] px-1.5 py-0 h-4 bg-primary">
+          <Shield className="h-2.5 w-2.5 mr-0.5" />
+          Admin
+        </Badge>
+      );
+    }
+    if (role === 'staff') {
+      return (
+        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+          <UserCog className="h-2.5 w-2.5 mr-0.5" />
+          Staff
+        </Badge>
+      );
+    }
+    return null;
+  };
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
@@ -169,11 +192,14 @@ function AppSidebar() {
                   {!isCollapsed && (
                     <>
                       <div className="flex flex-col flex-1 text-left text-sm leading-tight">
-                        <span className="truncate font-medium text-sidebar-foreground">
-                          {displayName}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="truncate font-medium text-sidebar-foreground">
+                            {displayName}
+                          </span>
+                          {getRoleBadge()}
+                        </div>
                         <span className="truncate text-xs text-sidebar-foreground/60">
-                          {user?.email || 'admin@101kerja.my'}
+                          {user?.email}
                         </span>
                       </div>
                       <ChevronUp className="ml-auto h-4 w-4 text-sidebar-foreground/60" />
@@ -187,6 +213,12 @@ function AppSidebar() {
                 align="end"
                 sideOffset={4}
               >
+                <div className="px-2 py-1.5">
+                  <p className="text-sm font-medium">{displayName}</p>
+                  <p className="text-xs text-muted-foreground">{user?.email}</p>
+                  <div className="mt-1">{getRoleBadge()}</div>
+                </div>
+                <DropdownMenuSeparator />
                 {isAdmin && (
                   <>
                     <DropdownMenuItem asChild>

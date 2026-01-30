@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAdminUser } from '@/hooks/useAdminUser';
+import { useAdmin } from '@/contexts/AdminContext';
 import {
   useAdminUsers,
   useUpdateAdminRole,
@@ -15,7 +14,7 @@ import {
 import { AddAdminModal } from '@/components/AddAdminModal';
 import { getStatusConfig } from '@/lib/statusConfig';
 import { format } from 'date-fns';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -50,9 +49,8 @@ import { toast } from '@/hooks/use-toast';
 import type { HandoverStatus } from '@/types/database';
 
 export default function SettingsPage() {
-  const navigate = useNavigate();
   const { user } = useAuth();
-  const { isAdmin, loading: adminLoading } = useAdminUser();
+  const { isAdmin } = useAdmin();
 
   const { data: adminUsers, isLoading: adminsLoading } = useAdminUsers();
   const { data: stats, isLoading: statsLoading } = useSystemStats();
@@ -62,18 +60,6 @@ export default function SettingsPage() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [exportingUsers, setExportingUsers] = useState(false);
   const [exportingJobs, setExportingJobs] = useState(false);
-
-  // Redirect non-admins
-  useEffect(() => {
-    if (!adminLoading && !isAdmin) {
-      toast({
-        title: 'Access Denied',
-        description: 'You do not have permission to access this page.',
-        variant: 'destructive',
-      });
-      navigate('/');
-    }
-  }, [adminLoading, isAdmin, navigate]);
 
   const handleRoleChange = async (adminId: string, newRole: 'admin' | 'staff') => {
     try {
@@ -128,20 +114,6 @@ export default function SettingsPage() {
     }
   };
 
-  // Show loading while checking admin status
-  if (adminLoading) {
-    return (
-      <div className="animate-fade-in space-y-6">
-        <Skeleton className="h-10 w-48" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
-  }
-
-  // Don't render if not admin (redirect will happen)
-  if (!isAdmin) {
-    return null;
-  }
 
   const handoverStatuses: HandoverStatus[] = [
     'pending_verification',
