@@ -2,9 +2,10 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUsers, useTotalUsersCount, type UserFilter } from '@/hooks/useUsers';
 import { getOnboardingStatusConfig } from '@/lib/userStatusConfig';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { EmptyState } from '@/components/EmptyState';
+import { ErrorFallback } from '@/components/ErrorFallback';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -53,7 +54,7 @@ export default function UsersPage() {
   const debouncedSearch = useDebounce(searchInput, 300);
 
   const { data: totalCount } = useTotalUsersCount();
-  const { data, isLoading } = useUsers({
+  const { data, isLoading, isError, refetch } = useUsers({
     search: debouncedSearch,
     filter,
     page,
@@ -171,7 +172,6 @@ export default function UsersPage() {
         </CardContent>
       </Card>
 
-      {/* Data Table */}
       <Card className="shadow-sm">
         <CardContent className="pt-6">
           {isLoading ? (
@@ -180,50 +180,58 @@ export default function UsersPage() {
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
+          ) : isError ? (
+            <ErrorFallback
+              title="Failed to load users"
+              message="We couldn't load the user list. Please try again."
+              onRetry={() => refetch()}
+            />
           ) : data && data.users.length > 0 ? (
             <>
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Phone</TableHead>
-                      <TableHead>Location</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Last Active</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.users.map((user) => {
-                      const statusConfig = getOnboardingStatusConfig(user.onboarding_status);
-                      return (
-                        <TableRow
-                          key={user.id}
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => navigate(`/users/${user.id}`)}
-                        >
-                          <TableCell className="font-medium">
-                            {user.full_name || 'Unknown'}
-                          </TableCell>
-                          <TableCell className="font-mono text-sm">
-                            {user.phone_number}
-                          </TableCell>
-                          <TableCell>
-                            {formatLocation(user.location_city, user.location_state)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={statusConfig.className}>
-                              {statusConfig.label}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-sm">
-                            {formatLastActive(user.last_active_at)}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+              <div className="table-responsive">
+                <div className="rounded-md border min-w-[600px]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Phone</TableHead>
+                        <TableHead>Location</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Last Active</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.users.map((user) => {
+                        const statusConfig = getOnboardingStatusConfig(user.onboarding_status);
+                        return (
+                          <TableRow
+                            key={user.id}
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => navigate(`/users/${user.id}`)}
+                          >
+                            <TableCell className="font-medium">
+                              {user.full_name || 'Unknown'}
+                            </TableCell>
+                            <TableCell className="font-mono text-sm">
+                              {user.phone_number}
+                            </TableCell>
+                            <TableCell>
+                              {formatLocation(user.location_city, user.location_state)}
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={statusConfig.className}>
+                                {statusConfig.label}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {formatLastActive(user.last_active_at)}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
 
               {/* Pagination info and controls */}
@@ -236,17 +244,15 @@ export default function UsersPage() {
               </div>
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                <UsersIcon className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <p className="text-muted-foreground">No users found</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {searchInput || filter !== 'all'
+            <EmptyState
+              type="users"
+              title="No users found"
+              description={
+                searchInput || filter !== 'all'
                   ? 'Try adjusting your search or filter.'
-                  : 'Users will appear here once they register via WhatsApp.'}
-              </p>
-            </div>
+                  : 'Users will appear here once they register via WhatsApp.'
+              }
+            />
           )}
         </CardContent>
       </Card>
