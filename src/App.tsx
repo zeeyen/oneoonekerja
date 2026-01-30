@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import UsersPage from "./pages/UsersPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,7 +37,17 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <PlaceholderPage title="Users" description="View and manage job seekers registered via WhatsApp" />
+                    <UsersPage />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/users/:id"
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <PlaceholderPage title="User Detail" description="View user profile details" />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
