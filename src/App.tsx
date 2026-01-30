@@ -11,6 +11,7 @@ import Dashboard from "./pages/Dashboard";
 import UsersPage from "./pages/UsersPage";
 import UserDetailPage from "./pages/UserDetailPage";
 import JobsPage from "./pages/JobsPage";
+import JobFormPage from "./pages/JobFormPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -69,7 +70,7 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <PlaceholderPage title="Add Job" description="Create a new job listing" />
+                    <JobFormPage mode="create" />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
@@ -79,7 +80,17 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <PlaceholderPage title="Job Detail" description="View and edit job details" />
+                    <PlaceholderPage title="Job Detail" description="View job details" />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jobs/:id/edit"
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <JobFormPage mode="edit" />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
