@@ -32,11 +32,11 @@ const App = () => (
               }
             />
             <Route
-              path="/job-seekers"
+              path="/users"
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <PlaceholderPage title="Job Seekers" description="View and manage job seekers registered via WhatsApp" />
+                    <PlaceholderPage title="Users" description="View and manage job seekers registered via WhatsApp" />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
@@ -46,27 +46,27 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <PlaceholderPage title="Job Listings" description="Manage gig economy job listings" />
+                    <PlaceholderPage title="Jobs" description="Manage gig economy job listings" />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
             />
             <Route
-              path="/verification"
+              path="/handovers"
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <PlaceholderPage title="Verification" description="Verify candidates using eligibility token system" />
+                    <PlaceholderPage title="Handovers" description="Track candidates sent to recruiters for verification" />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
             />
             <Route
-              path="/pipeline"
+              path="/conversations"
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <PlaceholderPage title="Hiring Pipeline" description="Track hiring pipeline status" />
+                    <PlaceholderPage title="Conversations" description="View WhatsApp conversation logs" />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
