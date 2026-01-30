@@ -14,6 +14,7 @@ import JobsPage from "./pages/JobsPage";
 import JobFormPage from "./pages/JobFormPage";
 import HandoversPage from "./pages/HandoversPage";
 import ConversationsPage from "./pages/ConversationsPage";
+import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -122,7 +123,7 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <PlaceholderPage title="Settings" description="Configure dashboard settings" />
+                    <SettingsPage />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
