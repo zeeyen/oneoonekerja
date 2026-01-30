@@ -12,6 +12,7 @@ import UsersPage from "./pages/UsersPage";
 import UserDetailPage from "./pages/UserDetailPage";
 import JobsPage from "./pages/JobsPage";
 import JobFormPage from "./pages/JobFormPage";
+import HandoversPage from "./pages/HandoversPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -100,7 +101,7 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <PlaceholderPage title="Handovers" description="Track candidates sent to recruiters for verification" />
+                    <HandoversPage />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
