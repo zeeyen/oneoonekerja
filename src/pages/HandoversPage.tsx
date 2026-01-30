@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useHandovers, useHandoverCounts, searchHandoverByToken, type HandoverTab } from '@/hooks/useHandovers';
 import { HandoverDetailModal } from '@/components/HandoverDetailModal';
+import { EmptyState } from '@/components/EmptyState';
+import { ErrorFallback } from '@/components/ErrorFallback';
 import { getStatusConfig } from '@/lib/statusConfig';
 import { formatDistanceToNow } from 'date-fns';
 import type { HandoverWithDetails } from '@/types/database';
@@ -28,7 +30,7 @@ export default function HandoversPage() {
   const [selectedHandover, setSelectedHandover] = useState<HandoverWithDetails | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
-  const { data: handovers, isLoading, refetch } = useHandovers(activeTab);
+  const { data: handovers, isLoading, isError, refetch } = useHandovers(activeTab);
   const { data: counts, refetch: refetchCounts } = useHandoverCounts();
 
   const handleModalUpdate = () => {
@@ -166,23 +168,33 @@ export default function HandoversPage() {
                       <Skeleton key={i} className="h-16 w-full" />
                     ))}
                   </div>
-                ) : !handovers?.length ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                    <FileCheck className="h-12 w-12 mb-4 opacity-20" />
-                    <p>No handovers in this category</p>
+                ) : isError ? (
+                  <div className="p-6">
+                    <ErrorFallback
+                      title="Failed to load handovers"
+                      message="We couldn't load the handovers. Please try again."
+                      onRetry={() => refetch()}
+                    />
                   </div>
+                ) : !handovers?.length ? (
+                  <EmptyState
+                    type="handovers"
+                    title="No handovers pending"
+                    description={activeTab === 'all' ? 'No handovers have been created yet.' : `No handovers in "${activeTab}" status.`}
+                  />
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>User</TableHead>
-                        <TableHead>Job Title</TableHead>
-                        <TableHead>Token</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Created</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                  <div className="table-responsive">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>User</TableHead>
+                          <TableHead>Job Title</TableHead>
+                          <TableHead>Token</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Created</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
                     <TableBody>
                       {handovers.map((handover) => {
                         const statusConfig = getStatusConfig(handover.status);
@@ -251,6 +263,7 @@ export default function HandoversPage() {
                       })}
                     </TableBody>
                   </Table>
+                  </div>
                 )}
               </CardContent>
             </Card>

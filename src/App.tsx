@@ -19,13 +19,29 @@ import SettingsPage from "./pages/SettingsPage";
 import AccessDenied from "./pages/AccessDenied";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      <Sonner />
+      <Sonner 
+        position="top-right" 
+        toastOptions={{
+          classNames: {
+            success: 'bg-success text-success-foreground border-success',
+            error: 'bg-destructive text-destructive-foreground border-destructive',
+            info: 'bg-info text-info-foreground border-info',
+          },
+        }}
+      />
       <BrowserRouter>
         <AuthProvider>
           <AdminProvider>

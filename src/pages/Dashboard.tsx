@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDashboardStats, useRecentHandovers, useDashboardRefresh } from '@/hooks/useDashboard';
 import { TokenVerificationModal } from '@/components/TokenVerificationModal';
+import { EmptyState } from '@/components/EmptyState';
+import { ErrorFallback } from '@/components/ErrorFallback';
 import { getStatusConfig } from '@/lib/statusConfig';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,8 +32,8 @@ import { format } from 'date-fns';
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { data: stats, isLoading: statsLoading } = useDashboardStats();
-  const { data: recentHandovers, isLoading: handoversLoading } = useRecentHandovers();
+  const { data: stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useDashboardStats();
+  const { data: recentHandovers, isLoading: handoversLoading, isError: handoversError, refetch: refetchHandovers } = useRecentHandovers();
   const refreshDashboard = useDashboardRefresh();
   const [tokenModalOpen, setTokenModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -160,66 +162,70 @@ export default function Dashboard() {
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
+          ) : handoversError ? (
+            <ErrorFallback
+              title="Failed to load handovers"
+              message="We couldn't load recent handovers."
+              onRetry={() => refetchHandovers()}
+            />
           ) : recentHandovers && recentHandovers.length > 0 ? (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User Name</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Job Title</TableHead>
-                    <TableHead>Token</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentHandovers.map((handover) => {
-                    const statusConfig = getStatusConfig(handover.status);
-                    return (
-                      <TableRow
-                        key={handover.id}
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => navigate(`/handovers/${handover.id}`)}
-                      >
-                        <TableCell className="font-medium">
-                          {handover.user?.full_name || 'Unknown'}
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">
-                          {handover.user?.phone_number || '-'}
-                        </TableCell>
-                        <TableCell>
-                          {handover.job?.job_title || 'Unknown Job'}
-                        </TableCell>
-                        <TableCell>
-                          <code className="bg-muted px-2 py-1 rounded text-xs font-mono">
-                            {handover.eligibility_token}
-                          </code>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={statusConfig.className}>
-                            {statusConfig.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {format(new Date(handover.created_at), 'dd MMM yyyy')}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+            <div className="table-responsive">
+              <div className="rounded-md border min-w-[600px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User Name</TableHead>
+                      <TableHead>Phone</TableHead>
+                      <TableHead>Job Title</TableHead>
+                      <TableHead>Token</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Created</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {recentHandovers.map((handover) => {
+                      const statusConfig = getStatusConfig(handover.status);
+                      return (
+                        <TableRow
+                          key={handover.id}
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => navigate(`/handovers/${handover.id}`)}
+                        >
+                          <TableCell className="font-medium">
+                            {handover.user?.full_name || 'Unknown'}
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">
+                            {handover.user?.phone_number || '-'}
+                          </TableCell>
+                          <TableCell>
+                            {handover.job?.job_title || 'Unknown Job'}
+                          </TableCell>
+                          <TableCell>
+                            <code className="bg-muted px-2 py-1 rounded text-xs font-mono">
+                              {handover.eligibility_token}
+                            </code>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={statusConfig.className}>
+                              {statusConfig.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {format(new Date(handover.created_at), 'dd MMM yyyy')}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                <CheckCircle className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <p className="text-muted-foreground">No handovers yet</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Handovers will appear here once candidates are sent to recruiters.
-              </p>
-            </div>
+            <EmptyState
+              type="handovers"
+              title="No handovers yet"
+              description="Handovers will appear here once candidates are sent to recruiters."
+            />
           )}
         </CardContent>
       </Card>
