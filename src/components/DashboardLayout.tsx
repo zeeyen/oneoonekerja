@@ -1,6 +1,8 @@
 import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAdminUser } from '@/hooks/useAdminUser';
+import { usePendingHandoversCount } from '@/hooks/usePendingHandoversCount';
 import {
   Sidebar,
   SidebarContent,
@@ -10,6 +12,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
@@ -24,33 +27,24 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import {
   LayoutDashboard,
   Users,
   Briefcase,
-  BadgeCheck,
-  GitBranch,
+  ArrowRightCircle,
+  MessageSquare,
   Settings,
   LogOut,
   ChevronUp,
 } from 'lucide-react';
 
-const mainNavItems = [
-  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
-  { title: 'Job Seekers', url: '/job-seekers', icon: Users },
-  { title: 'Job Listings', url: '/jobs', icon: Briefcase },
-  { title: 'Verification', url: '/verification', icon: BadgeCheck },
-  { title: 'Pipeline', url: '/pipeline', icon: GitBranch },
-];
-
-const settingsNavItems = [
-  { title: 'Settings', url: '/settings', icon: Settings },
-];
-
 function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { isAdmin, fullName } = useAdminUser();
+  const { count: pendingCount } = usePendingHandoversCount();
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
 
@@ -64,22 +58,37 @@ function AppSidebar() {
     navigate('/login');
   };
 
-  const userInitials = user?.email
-    ?.split('@')[0]
-    .slice(0, 2)
-    .toUpperCase() || 'AD';
+  const displayName = fullName || user?.email?.split('@')[0] || 'Admin';
+  const userInitials = displayName.slice(0, 2).toUpperCase();
+
+  const mainNavItems = [
+    { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+    { title: 'Users', url: '/users', icon: Users },
+    { title: 'Jobs', url: '/jobs', icon: Briefcase },
+    { 
+      title: 'Handovers', 
+      url: '/handovers', 
+      icon: ArrowRightCircle,
+      badge: pendingCount > 0 ? pendingCount : undefined,
+    },
+    { title: 'Conversations', url: '/conversations', icon: MessageSquare },
+  ];
+
+  const systemNavItems = [
+    { title: 'Settings', url: '/settings', icon: Settings, adminOnly: true },
+  ].filter(item => !item.adminOnly || isAdmin);
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-3 px-2 py-2">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground flex-shrink-0">
-            <Briefcase className="h-4 w-4" />
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground flex-shrink-0 font-bold text-sm">
+            101
           </div>
           {!isCollapsed && (
             <div className="flex flex-col">
               <span className="font-semibold text-sidebar-foreground text-sm">101Kerja</span>
-              <span className="text-xs text-sidebar-muted">Admin Portal</span>
+              <span className="text-xs text-sidebar-foreground/60">Admin Portal</span>
             </div>
           )}
         </div>
@@ -87,7 +96,7 @@ function AppSidebar() {
 
       <SidebarContent className="scrollbar-thin">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-muted">Main Menu</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-sidebar-foreground/60">Main Menu</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {mainNavItems.map((item) => (
@@ -102,33 +111,45 @@ function AppSidebar() {
                       <span>{item.title}</span>
                     </Link>
                   </SidebarMenuButton>
+                  {item.badge !== undefined && (
+                    <SidebarMenuBadge>
+                      <Badge 
+                        variant="destructive" 
+                        className="h-5 min-w-5 px-1.5 text-xs font-medium"
+                      >
+                        {item.badge > 99 ? '99+' : item.badge}
+                      </Badge>
+                    </SidebarMenuBadge>
+                  )}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-muted">System</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {settingsNavItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive(item.url)}
-                    tooltip={item.title}
-                  >
-                    <Link to={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {systemNavItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-sidebar-foreground/60">System</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {systemNavItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive(item.url)}
+                      tooltip={item.title}
+                    >
+                      <Link to={item.url}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">
@@ -141,7 +162,7 @@ function AppSidebar() {
                   className="data-[state=open]:bg-sidebar-accent"
                 >
                   <Avatar className="h-8 w-8">
-                    <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
+                    <AvatarFallback className="bg-primary text-primary-foreground text-xs">
                       {userInitials}
                     </AvatarFallback>
                   </Avatar>
@@ -149,13 +170,13 @@ function AppSidebar() {
                     <>
                       <div className="flex flex-col flex-1 text-left text-sm leading-tight">
                         <span className="truncate font-medium text-sidebar-foreground">
-                          {user?.email?.split('@')[0] || 'Admin'}
+                          {displayName}
                         </span>
-                        <span className="truncate text-xs text-sidebar-muted">
+                        <span className="truncate text-xs text-sidebar-foreground/60">
                           {user?.email || 'admin@101kerja.my'}
                         </span>
                       </div>
-                      <ChevronUp className="ml-auto h-4 w-4 text-sidebar-muted" />
+                      <ChevronUp className="ml-auto h-4 w-4 text-sidebar-foreground/60" />
                     </>
                   )}
                 </SidebarMenuButton>
@@ -166,13 +187,17 @@ function AppSidebar() {
                 align="end"
                 sideOffset={4}
               >
-                <DropdownMenuItem asChild>
-                  <Link to="/settings" className="cursor-pointer">
-                    <Settings className="mr-2 h-4 w-4" />
-                    Settings
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                {isAdmin && (
+                  <>
+                    <DropdownMenuItem asChild>
+                      <Link to="/settings" className="cursor-pointer">
+                        <Settings className="mr-2 h-4 w-4" />
+                        Settings
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DropdownMenuItem
                   onClick={handleSignOut}
                   className="cursor-pointer text-destructive focus:text-destructive"
