@@ -28,8 +28,13 @@ export default function HandoversPage() {
   const [selectedHandover, setSelectedHandover] = useState<HandoverWithDetails | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
-  const { data: handovers, isLoading } = useHandovers(activeTab);
-  const { data: counts } = useHandoverCounts();
+  const { data: handovers, isLoading, refetch } = useHandovers(activeTab);
+  const { data: counts, refetch: refetchCounts } = useHandoverCounts();
+
+  const handleModalUpdate = () => {
+    refetch();
+    refetchCounts();
+  };
 
   const handleTokenSearch = async () => {
     const token = tokenInput.trim().toUpperCase();
@@ -258,6 +263,7 @@ export default function HandoversPage() {
         handover={selectedHandover}
         open={modalOpen}
         onOpenChange={setModalOpen}
+        onUpdate={handleModalUpdate}
       />
     </div>
   );

@@ -17,8 +17,8 @@ async function fetchHandovers(tab: HandoverTab): Promise<HandoverWithDetails[]> 
     .from('handovers')
     .select(`
       *,
-      user:users(full_name, phone_number),
-      job:jobs(job_title, position)
+      user:users(id, full_name, phone_number, ic_number, location_city, location_state, preferred_job_types, preferred_positions),
+      job:jobs(id, job_title, position, location_city, location_state, hourly_rate, whatsapp_group_link)
     `)
     .order('created_at', { ascending: false });
 
@@ -85,8 +85,8 @@ export async function searchHandoverByToken(token: string): Promise<HandoverWith
     .from('handovers')
     .select(`
       *,
-      user:users(full_name, phone_number),
-      job:jobs(job_title, position)
+      user:users(id, full_name, phone_number, ic_number, location_city, location_state, preferred_job_types, preferred_positions),
+      job:jobs(id, job_title, position, location_city, location_state, hourly_rate, whatsapp_group_link)
     `)
     .eq('eligibility_token', token.trim().toUpperCase())
     .maybeSingle();
