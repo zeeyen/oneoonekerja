@@ -12,6 +12,7 @@ import {
   exportJobsToCSV,
 } from '@/hooks/useSettings';
 import { AddAdminModal } from '@/components/AddAdminModal';
+import { ChangePasswordCard } from '@/components/ChangePasswordCard';
 import { getStatusConfig } from '@/lib/statusConfig';
 import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -297,6 +298,14 @@ export default function SettingsPage() {
             )}
           </CardContent>
         </Card>
+      </div>
+
+      {/* Account Security */}
+      <div>
+        <h2 className="text-lg font-semibold mb-4">Account Security</h2>
+        <div className="max-w-md">
+          <ChangePasswordCard />
+        </div>
       </div>
 
       {/* Quick Actions */}
