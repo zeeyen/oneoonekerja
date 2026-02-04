@@ -15,6 +15,7 @@ import ApplicantsPage from "./pages/ApplicantsPage";
 import ApplicantDetailPage from "./pages/ApplicantDetailPage";
 import JobsPage from "./pages/JobsPage";
 import JobFormPage from "./pages/JobFormPage";
+import JobDetailPage from "./pages/JobDetailPage";
 import ConversationsPage from "./pages/ConversationsPage";
 import SettingsPage from "./pages/SettingsPage";
 import AccessDenied from "./pages/AccessDenied";
@@ -106,7 +107,7 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <DashboardLayout>
-                      <PlaceholderPage title="Job Detail" description="View job details" />
+                      <JobDetailPage />
                     </DashboardLayout>
                   </ProtectedRoute>
                 }
