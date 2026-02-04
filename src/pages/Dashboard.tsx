@@ -1,23 +1,59 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useDashboardStats, useDashboardRefresh } from '@/hooks/useDashboard';
+import { useDashboardStats, useRecentApplicants, useDashboardRefresh } from '@/hooks/useDashboard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import {
   Users,
   Briefcase,
-  Clock,
-  CheckCircle,
+  Activity,
   RefreshCw,
-  Plus,
 } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+
+function formatPhoneNumber(phone: string | null): string {
+  if (!phone) return '-';
+  // Format: +60 12-345 6789
+  const cleaned = phone.replace(/\D/g, '');
+  if (cleaned.startsWith('60') && cleaned.length >= 10) {
+    const rest = cleaned.slice(2);
+    if (rest.length === 9) {
+      return `+60 ${rest.slice(0, 2)}-${rest.slice(2, 5)} ${rest.slice(5)}`;
+    } else if (rest.length === 10) {
+      return `+60 ${rest.slice(0, 2)}-${rest.slice(2, 6)} ${rest.slice(6)}`;
+    }
+  }
+  return phone;
+}
+
+function getStatusBadge(status: string | null) {
+  switch (status) {
+    case 'completed':
+      return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Completed</Badge>;
+    case 'in_progress':
+      return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">In Progress</Badge>;
+    case 'new':
+    default:
+      return <Badge variant="secondary">New</Badge>;
+  }
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
+  const { data: recentApplicants, isLoading: applicantsLoading } = useRecentApplicants();
   const refreshDashboard = useDashboardRefresh();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -39,18 +75,10 @@ export default function Dashboard() {
     {
       title: 'Active Today',
       value: stats?.activeToday ?? 0,
-      icon: Clock,
+      icon: Activity,
       description: 'Applicants active today',
       color: 'text-emerald-600',
       bgColor: 'bg-emerald-50',
-    },
-    {
-      title: 'Completed Onboarding',
-      value: stats?.completedOnboarding ?? 0,
-      icon: CheckCircle,
-      description: 'Fully onboarded applicants',
-      color: 'text-green-600',
-      bgColor: 'bg-green-50',
     },
     {
       title: 'Active Jobs',
@@ -85,8 +113,8 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      {/* Stats cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Stats cards - 3 cards */}
+      <div className="grid gap-4 md:grid-cols-3">
         {statCards.map((stat) => (
           <Card key={stat.title} className="shadow-sm hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -109,21 +137,65 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Quick Actions */}
+      {/* Recent Applicants */}
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle className="text-lg">Quick Actions</CardTitle>
-          <CardDescription>Common tasks you can perform quickly</CardDescription>
+          <CardTitle className="text-lg">Recent Applicants</CardTitle>
+          <CardDescription>Last 10 applicants who registered</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
-          <Button variant="outline" onClick={() => navigate('/jobs/new')}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Job
-          </Button>
-          <Button variant="outline" onClick={() => navigate('/applicants')}>
-            <Users className="mr-2 h-4 w-4" />
-            View Applicants
-          </Button>
+        <CardContent>
+          {applicantsLoading ? (
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : recentApplicants && recentApplicants.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Registered</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentApplicants.map((applicant) => (
+                  <TableRow
+                    key={applicant.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => navigate(`/applicants/${applicant.id}`)}
+                  >
+                    <TableCell className="font-medium">
+                      {applicant.full_name || '-'}
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">
+                      {formatPhoneNumber(applicant.phone_number)}
+                    </TableCell>
+                    <TableCell>
+                      {applicant.location_city && applicant.location_state
+                        ? `${applicant.location_city}, ${applicant.location_state}`
+                        : applicant.location_city || applicant.location_state || '-'}
+                    </TableCell>
+                    <TableCell>
+                      {getStatusBadge(applicant.onboarding_status)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {applicant.created_at
+                        ? formatDistanceToNow(new Date(applicant.created_at), { addSuffix: true })
+                        : '-'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              No applicants registered yet
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
