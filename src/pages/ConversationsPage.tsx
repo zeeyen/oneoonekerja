@@ -51,7 +51,6 @@ import {
   Loader2,
   ChevronDown,
   ChevronRight,
-  Zap,
   Clock,
   Hash,
 } from 'lucide-react';
@@ -142,7 +141,7 @@ export default function ConversationsPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Messages Today</CardTitle>
@@ -150,15 +149,6 @@ export default function ConversationsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.totalMessagesToday ?? '-'}</div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Tokens Today</CardTitle>
-            <Zap className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalTokensToday?.toLocaleString() ?? '-'}</div>
           </CardContent>
         </Card>
         <Card className="shadow-sm">
@@ -320,7 +310,6 @@ export default function ConversationsPage() {
                   <TableHead>Direction</TableHead>
                   <TableHead>Message</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead className="text-right">Tokens</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -363,13 +352,10 @@ export default function ConversationsPage() {
                           <span className="text-sm">{truncate(conv.message_content, 50)}</span>
                         </TableCell>
                         <TableCell>{getMessageTypeBadge(conv.message_type)}</TableCell>
-                        <TableCell className="text-right font-mono text-sm">
-                          {conv.llm_tokens_used > 0 ? conv.llm_tokens_used : '-'}
-                        </TableCell>
                       </TableRow>
                       <CollapsibleContent asChild>
                         <TableRow className="bg-muted/50 hover:bg-muted/50">
-                          <TableCell colSpan={7} className="p-4">
+                          <TableCell colSpan={6} className="p-4">
                             <div className="space-y-4">
                               {/* Full Message */}
                               <div>
