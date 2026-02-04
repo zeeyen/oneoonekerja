@@ -13,11 +13,9 @@ import {
 } from '@/hooks/useSettings';
 import { AddAdminModal } from '@/components/AddAdminModal';
 import { ChangePasswordCard } from '@/components/ChangePasswordCard';
-import { getStatusConfig } from '@/lib/statusConfig';
 import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -39,7 +37,7 @@ import {
   Users,
   MessageSquare,
   Zap,
-  FileCheck,
+  Briefcase,
   Download,
   Plus,
   Loader2,
@@ -47,7 +45,6 @@ import {
   Settings as SettingsIcon,
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import type { HandoverStatus } from '@/types/database';
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -114,16 +111,6 @@ export default function SettingsPage() {
       setExportingJobs(false);
     }
   };
-
-
-  const handoverStatuses: HandoverStatus[] = [
-    'pending_verification',
-    'verified',
-    'approved',
-    'hired',
-    'started_work',
-    'dropped_out',
-  ];
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -193,29 +180,15 @@ export default function SettingsPage() {
           <Card className="shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Handovers by Status
+                Active Jobs
               </CardTitle>
-              <FileCheck className="h-4 w-4 text-muted-foreground" />
+              <Briefcase className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               {statsLoading ? (
-                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-16" />
               ) : (
-                <div className="flex flex-wrap gap-1">
-                  {handoverStatuses.map((status) => {
-                    const count = stats?.handoversByStatus[status] || 0;
-                    if (count === 0) return null;
-                    const config = getStatusConfig(status);
-                    return (
-                      <Badge key={status} variant="outline" className={config.className}>
-                        {count}
-                      </Badge>
-                    );
-                  })}
-                  {Object.keys(stats?.handoversByStatus || {}).length === 0 && (
-                    <span className="text-sm text-muted-foreground">No handovers</span>
-                  )}
-                </div>
+                <div className="text-2xl font-bold">{stats?.activeJobs.toLocaleString()}</div>
               )}
             </CardContent>
           </Card>

@@ -84,64 +84,6 @@ export interface JobMatch {
   created_at: string;
 }
 
-export type HandoverStatus =
-  | 'pending_verification'
-  | 'verified'
-  | 'approved'
-  | 'rejected'
-  | 'interview_scheduled'
-  | 'interviewed'
-  | 'offer_made'
-  | 'hired'
-  | 'started_work'
-  | 'dropped_out';
-
-export interface Handover {
-  id: string;
-  user_id: string;
-  job_id: string;
-  job_match_id: string | null;
-  eligibility_token: string;
-  whatsapp_group_link: string;
-  status: HandoverStatus;
-  verified_by: string | null;
-  verified_at: string | null;
-  staff_notes: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-// Extended applicant type for handover details
-export interface HandoverApplicant {
-  id: string;
-  full_name: string | null;
-  phone_number: string;
-  ic_number?: string | null;
-  location_city?: string | null;
-  location_state?: string | null;
-  preferred_job_types?: string[];
-  preferred_positions?: string[];
-}
-
-// Alias for backwards compatibility
-export type HandoverUser = HandoverApplicant;
-
-// Extended job type for handover details
-export interface HandoverJob {
-  id: string;
-  job_title: string;
-  position: string;
-  location_city?: string | null;
-  location_state?: string | null;
-  hourly_rate?: number | null;
-  whatsapp_group_link?: string | null;
-}
-
-export interface HandoverWithDetails extends Handover {
-  user?: HandoverUser;
-  job?: HandoverJob;
-}
-
 export interface AdminUser {
   id: string;
   email: string;

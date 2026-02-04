@@ -1,12 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import type { Applicant, JobMatch, Handover, Conversation, Job } from '@/types/database';
+import type { Applicant, JobMatch, Conversation, Job } from '@/types/database';
 
 export interface JobMatchWithJob extends JobMatch {
-  job?: Pick<Job, 'job_title' | 'position'>;
-}
-
-export interface HandoverWithJob extends Handover {
   job?: Pick<Job, 'job_title' | 'position'>;
 }
 
@@ -37,27 +33,6 @@ async function fetchApplicantJobMatches(applicantId: string): Promise<JobMatchWi
 
   if (error) {
     console.error('Error fetching job matches:', error);
-    return [];
-  }
-
-  return (data ?? []).map((item) => ({
-    ...item,
-    job: Array.isArray(item.job) ? item.job[0] : item.job,
-  }));
-}
-
-async function fetchApplicantHandovers(applicantId: string): Promise<HandoverWithJob[]> {
-  const { data, error } = await supabase
-    .from('handovers')
-    .select(`
-      *,
-      job:jobs(job_title, position)
-    `)
-    .eq('user_id', applicantId)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching handovers:', error);
     return [];
   }
 
@@ -116,14 +91,6 @@ export function useApplicantJobMatches(applicantId: string) {
   return useQuery({
     queryKey: ['applicant-job-matches', applicantId],
     queryFn: () => fetchApplicantJobMatches(applicantId),
-    enabled: !!applicantId,
-  });
-}
-
-export function useApplicantHandovers(applicantId: string) {
-  return useQuery({
-    queryKey: ['applicant-handovers', applicantId],
-    queryFn: () => fetchApplicantHandovers(applicantId),
     enabled: !!applicantId,
   });
 }

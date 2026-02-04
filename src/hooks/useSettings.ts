@@ -86,7 +86,7 @@ interface SystemStats {
   totalApplicants: number;
   messagesThisMonth: number;
   tokensThisMonth: number;
-  handoversByStatus: Record<string, number>;
+  activeJobs: number;
 }
 
 async function fetchSystemStats(): Promise<SystemStats> {
@@ -109,21 +109,17 @@ async function fetchSystemStats(): Promise<SystemStats> {
   const messagesThisMonth = messagesData?.length || 0;
   const tokensThisMonth = messagesData?.reduce((sum, m) => sum + (m.llm_tokens_used || 0), 0) || 0;
 
-  // Fetch handovers by status
-  const { data: handoversData } = await supabase
-    .from('handovers')
-    .select('status');
-
-  const handoversByStatus: Record<string, number> = {};
-  handoversData?.forEach((h) => {
-    handoversByStatus[h.status] = (handoversByStatus[h.status] || 0) + 1;
-  });
+  // Fetch active jobs count
+  const { count: activeJobs } = await supabase
+    .from('jobs')
+    .select('*', { count: 'exact', head: true })
+    .eq('is_active', true);
 
   return {
     totalApplicants: totalApplicants || 0,
     messagesThisMonth,
     tokensThisMonth,
-    handoversByStatus,
+    activeJobs: activeJobs || 0,
   };
 }
 
