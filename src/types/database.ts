@@ -47,6 +47,8 @@ export interface Job {
   max_age: number | null;
   lat: number | null;
   lng: number | null;
+  last_edited_by: string | null;
+  last_edited_at: string | null;
 }
 
 export interface Conversation {
