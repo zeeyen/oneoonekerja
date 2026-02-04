@@ -42,14 +42,11 @@ export const INDUSTRY_OPTIONS = [
   'Manufacturing',
   'Retail',
   'Logistics',
-  'F&B',
-  'Hospitality',
-  'Construction',
-  'Healthcare',
+  'Food & Beverage',
+  'Office',
+  'Transportation',
+  'Recruitment',
   'Education',
-  'Technology',
-  'Finance',
-  'Agriculture',
   'Other',
 ];
 
@@ -91,7 +88,7 @@ async function fetchJobs({
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  query = query.order('created_at', { ascending: false }).range(from, to);
+  query = query.order('expire_by', { ascending: false }).range(from, to);
 
   const { data, count, error } = await query;
 

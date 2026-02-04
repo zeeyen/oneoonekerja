@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   useJobs,
   useActiveJobsCount,
-  useDeleteJob,
   MALAYSIAN_STATES,
   INDUSTRY_OPTIONS,
   type JobStatusFilter,
@@ -12,7 +11,6 @@ import { EmptyState } from '@/components/EmptyState';
 import { ErrorFallback } from '@/components/ErrorFallback';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -38,7 +36,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
-import { Search, Briefcase, Plus, ExternalLink } from 'lucide-react';
+import { Search, Briefcase, ExternalLink } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 import { useDebounce } from '@/hooks/useDebounce';
 
@@ -80,8 +78,8 @@ export default function JobsPage() {
     return city || state || '-';
   };
 
-  const isJobActive = (expireBy: string) => {
-    return !isPast(parseISO(expireBy));
+  const isJobExpired = (expireBy: string) => {
+    return isPast(parseISO(expireBy));
   };
 
   const renderPagination = () => {
@@ -135,25 +133,19 @@ export default function JobsPage() {
 
   return (
     <div className="animate-fade-in space-y-6">
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Briefcase className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Jobs</h1>
-            <p className="text-sm text-muted-foreground">
-              {activeCount !== undefined
-                ? `${activeCount.toLocaleString()} active jobs`
-                : 'Loading...'}
-            </p>
-          </div>
+      {/* Page header - no Add Job button */}
+      <div className="flex items-center gap-3">
+        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+          <Briefcase className="h-5 w-5 text-primary" />
         </div>
-        <Button onClick={() => navigate('/jobs/new')}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Job
-        </Button>
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Jobs</h1>
+          <p className="text-sm text-muted-foreground">
+            {activeCount !== undefined
+              ? `${activeCount.toLocaleString()} active jobs`
+              : 'Loading...'}
+          </p>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -193,7 +185,7 @@ export default function JobsPage() {
                 value={industryFilter}
                 onValueChange={setIndustryFilter}
               >
-                <SelectTrigger className="w-full sm:w-[150px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="Industry" />
                 </SelectTrigger>
                 <SelectContent className="bg-background border shadow-lg z-50">
@@ -250,22 +242,28 @@ export default function JobsPage() {
                         <TableHead>Location</TableHead>
                         <TableHead>Industry</TableHead>
                         <TableHead>Salary</TableHead>
-                        <TableHead className="text-center">Status</TableHead>
                         <TableHead>Expires</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {data.jobs.map((job) => {
-                        const active = isJobActive(job.expire_by);
+                        const expired = isJobExpired(job.expire_by);
                         return (
                           <TableRow
                             key={job.id}
-                            className="cursor-pointer hover:bg-muted/50"
-                            onClick={() => navigate(`/jobs/${job.id}/edit`)}
+                            className={`cursor-pointer hover:bg-muted/50 ${
+                              expired ? 'bg-muted/30' : ''
+                            }`}
+                            onClick={() => navigate(`/jobs/${job.id}`)}
                           >
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
                                 {job.title}
+                                {expired && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    Expired
+                                  </Badge>
+                                )}
                                 {job.url && (
                                   <a
                                     href={job.url}
@@ -293,18 +291,11 @@ export default function JobsPage() {
                             <TableCell className="text-sm">
                               {job.salary_range || '-'}
                             </TableCell>
-                            <TableCell className="text-center">
-                              <Badge
-                                className={
-                                  active
-                                    ? 'bg-green-100 text-green-800 border-green-200'
-                                    : 'bg-gray-100 text-gray-800 border-gray-200'
-                                }
-                              >
-                                {active ? 'Active' : 'Expired'}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-muted-foreground text-sm">
+                            <TableCell
+                              className={`text-sm ${
+                                expired ? 'text-destructive' : 'text-muted-foreground'
+                              }`}
+                            >
                               {format(parseISO(job.expire_by), 'dd MMM yyyy')}
                             </TableCell>
                           </TableRow>
@@ -327,16 +318,11 @@ export default function JobsPage() {
           ) : (
             <EmptyState
               type="jobs"
-              title="No jobs yet"
+              title="No jobs found"
               description={
                 searchInput || statusFilter !== 'all' || industryFilter !== 'all' || stateFilter !== 'all'
                   ? 'Try adjusting your search or filters.'
-                  : 'Create your first job listing to get started.'
-              }
-              action={
-                !searchInput && statusFilter === 'all' && industryFilter === 'all' && stateFilter === 'all'
-                  ? { label: 'Add Job', onClick: () => navigate('/jobs/new') }
-                  : undefined
+                  : 'No jobs have been added yet.'
               }
             />
           )}
