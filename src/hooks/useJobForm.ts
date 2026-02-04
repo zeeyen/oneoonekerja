@@ -1,59 +1,38 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { Job } from '@/types/database';
+import { INDUSTRY_OPTIONS } from './useJobs';
 
-export const POSITION_OPTIONS = [
-  { value: 'cashier', label: 'Cashier' },
-  { value: 'waiter', label: 'Waiter' },
-  { value: 'cleaner', label: 'Cleaner' },
-  { value: 'packer', label: 'Packer' },
-  { value: 'driver', label: 'Driver' },
-  { value: 'sorter', label: 'Sorter' },
-  { value: 'promoter', label: 'Promoter' },
-  { value: 'technician', label: 'Technician' },
-  { value: 'supervisor', label: 'Supervisor' },
-  { value: 'general_worker', label: 'General Worker' },
-  { value: 'other', label: 'Other' },
-];
+export { INDUSTRY_OPTIONS };
 
 export interface JobFormData {
-  job_title: string;
-  position: string;
-  job_type: number | null;
-  hourly_rate: number | null;
-  branch_name: string;
-  location_city: string;
+  title: string;
+  company: string;
   location_state: string;
-  location_postcode: string;
+  location_city: string;
+  min_experience_years: number;
+  salary_range: string;
   gender_requirement: 'any' | 'male' | 'female';
-  age_min: number | null;
-  age_max: number | null;
-  is_oku_friendly: boolean;
-  num_shifts: number | null;
-  start_date: string | null;
-  end_date: string | null;
-  slots_available: number;
-  whatsapp_group_link: string;
+  industry: string;
+  url: string;
+  expire_by: string; // date string YYYY-MM-DD
+  min_age: number | null;
+  max_age: number | null;
 }
 
 export const defaultJobFormData: JobFormData = {
-  job_title: '',
-  position: '',
-  job_type: 1,
-  hourly_rate: null,
-  branch_name: '',
-  location_city: '',
+  title: '',
+  company: '',
   location_state: '',
-  location_postcode: '',
+  location_city: '',
+  min_experience_years: 0,
+  salary_range: '',
   gender_requirement: 'any',
-  age_min: null,
-  age_max: null,
-  is_oku_friendly: false,
-  num_shifts: null,
-  start_date: null,
-  end_date: null,
-  slots_available: 10,
-  whatsapp_group_link: '',
+  industry: '',
+  url: '',
+  expire_by: '',
+  min_age: null,
+  max_age: null,
 };
 
 async function fetchJobById(id: string): Promise<Job | null> {
@@ -74,10 +53,7 @@ async function fetchJobById(id: string): Promise<Job | null> {
 async function createJob(formData: JobFormData): Promise<Job> {
   const { data, error } = await supabase
     .from('jobs')
-    .insert({
-      ...formData,
-      is_active: true,
-    })
+    .insert(formData)
     .select()
     .single();
 

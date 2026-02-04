@@ -2,13 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { Job } from '@/types/database';
 
-export type JobStatusFilter = 'all' | 'active' | 'inactive';
-export type JobTypeFilter = 'all' | 'part_time' | 'full_time';
+export type JobStatusFilter = 'all' | 'active' | 'expired';
 
 interface UseJobsOptions {
   search: string;
   statusFilter: JobStatusFilter;
-  typeFilter: JobTypeFilter;
+  industryFilter: string;
   stateFilter: string;
   page: number;
   pageSize: number;
@@ -39,34 +38,48 @@ export const MALAYSIAN_STATES = [
   'Terengganu',
 ];
 
+export const INDUSTRY_OPTIONS = [
+  'Manufacturing',
+  'Retail',
+  'Logistics',
+  'F&B',
+  'Hospitality',
+  'Construction',
+  'Healthcare',
+  'Education',
+  'Technology',
+  'Finance',
+  'Agriculture',
+  'Other',
+];
+
 async function fetchJobs({
   search,
   statusFilter,
-  typeFilter,
+  industryFilter,
   stateFilter,
   page,
   pageSize,
 }: UseJobsOptions): Promise<JobsResult> {
+  const today = new Date().toISOString().split('T')[0];
   let query = supabase.from('jobs').select('*', { count: 'exact' });
 
   // Apply search filter
   if (search.trim()) {
     const searchTerm = `%${search.trim()}%`;
-    query = query.or(`job_title.ilike.${searchTerm},position.ilike.${searchTerm}`);
+    query = query.or(`title.ilike.${searchTerm},company.ilike.${searchTerm}`);
   }
 
-  // Apply status filter
+  // Apply status filter (based on expire_by date)
   if (statusFilter === 'active') {
-    query = query.eq('is_active', true);
-  } else if (statusFilter === 'inactive') {
-    query = query.eq('is_active', false);
+    query = query.gte('expire_by', today);
+  } else if (statusFilter === 'expired') {
+    query = query.lt('expire_by', today);
   }
 
-  // Apply job type filter
-  if (typeFilter === 'part_time') {
-    query = query.eq('job_type', 1);
-  } else if (typeFilter === 'full_time') {
-    query = query.eq('job_type', 2);
+  // Apply industry filter
+  if (industryFilter && industryFilter !== 'all') {
+    query = query.eq('industry', industryFilter);
   }
 
   // Apply state filter
@@ -95,10 +108,11 @@ async function fetchJobs({
 }
 
 async function fetchActiveJobsCount(): Promise<number> {
+  const today = new Date().toISOString().split('T')[0];
   const { count, error } = await supabase
     .from('jobs')
     .select('*', { count: 'exact', head: true })
-    .eq('is_active', true);
+    .gte('expire_by', today);
 
   if (error) {
     console.error('Error fetching active jobs count:', error);
@@ -108,14 +122,14 @@ async function fetchActiveJobsCount(): Promise<number> {
   return count ?? 0;
 }
 
-async function updateJobStatus(jobId: string, isActive: boolean): Promise<void> {
+async function deleteJob(jobId: string): Promise<void> {
   const { error } = await supabase
     .from('jobs')
-    .update({ is_active: isActive })
+    .delete()
     .eq('id', jobId);
 
   if (error) {
-    console.error('Error updating job status:', error);
+    console.error('Error deleting job:', error);
     throw error;
   }
 }
@@ -136,12 +150,11 @@ export function useActiveJobsCount() {
   });
 }
 
-export function useUpdateJobStatus() {
+export function useDeleteJob() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ jobId, isActive }: { jobId: string; isActive: boolean }) =>
-      updateJobStatus(jobId, isActive),
+    mutationFn: (jobId: string) => deleteJob(jobId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
       queryClient.invalidateQueries({ queryKey: ['jobs-active-count'] });

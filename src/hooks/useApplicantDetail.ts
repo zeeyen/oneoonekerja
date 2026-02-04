@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import type { Applicant, JobMatch, Conversation, Job } from '@/types/database';
 
 export interface JobMatchWithJob extends JobMatch {
-  job?: Pick<Job, 'job_title' | 'position'>;
+  job?: Pick<Job, 'title' | 'company'>;
 }
 
 async function fetchApplicantById(id: string): Promise<Applicant | null> {
@@ -26,7 +26,7 @@ async function fetchApplicantJobMatches(applicantId: string): Promise<JobMatchWi
     .from('job_matches')
     .select(`
       *,
-      job:jobs(job_title, position)
+      job:jobs(title, company)
     `)
     .eq('user_id', applicantId)
     .order('created_at', { ascending: false });

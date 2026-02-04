@@ -93,6 +93,7 @@ async function fetchSystemStats(): Promise<SystemStats> {
   const now = new Date();
   const monthStart = startOfMonth(now).toISOString();
   const monthEnd = endOfMonth(now).toISOString();
+  const todayDate = now.toISOString().split('T')[0];
 
   // Fetch total applicants
   const { count: totalApplicants } = await supabase
@@ -109,11 +110,11 @@ async function fetchSystemStats(): Promise<SystemStats> {
   const messagesThisMonth = messagesData?.length || 0;
   const tokensThisMonth = messagesData?.reduce((sum, m) => sum + (m.llm_tokens_used || 0), 0) || 0;
 
-  // Fetch active jobs count
+  // Fetch active jobs count (expire_by >= today)
   const { count: activeJobs } = await supabase
     .from('jobs')
     .select('*', { count: 'exact', head: true })
-    .eq('is_active', true);
+    .gte('expire_by', todayDate);
 
   return {
     totalApplicants: totalApplicants || 0,
@@ -188,29 +189,24 @@ export function exportApplicantsToCSV(applicants: Applicant[]): void {
 
 export function exportJobsToCSV(jobs: Job[]): void {
   const headers = [
-    'ID', 'Job Title', 'Position', 'Job Type', 'Branch',
-    'City', 'State', 'Postcode', 'Gender Req', 'Age Min', 'Age Max',
-    'OKU Friendly', 'Hourly Rate', 'Slots', 'Start Date', 'End Date',
-    'Is Active', 'Created At',
+    'ID', 'Title', 'Company', 'Industry', 'City', 'State',
+    'Salary Range', 'Gender Req', 'Min Age', 'Max Age',
+    'Min Experience', 'Expire By', 'URL', 'Created At',
   ];
   const rows = jobs.map((j) => [
     j.id,
-    `"${j.job_title.replace(/"/g, '""')}"`,
-    j.position,
-    j.job_type === 1 ? 'Part-time' : j.job_type === 2 ? 'Full-time' : '',
-    j.branch_name || '',
+    `"${j.title.replace(/"/g, '""')}"`,
+    j.company || '',
+    j.industry || '',
     j.location_city || '',
     j.location_state || '',
-    j.location_postcode || '',
+    j.salary_range || '',
     j.gender_requirement,
-    j.age_min || '',
-    j.age_max || '',
-    j.is_oku_friendly ? 'Yes' : 'No',
-    j.hourly_rate || '',
-    j.slots_available,
-    j.start_date || '',
-    j.end_date || '',
-    j.is_active ? 'Yes' : 'No',
+    j.min_age || '',
+    j.max_age || '',
+    j.min_experience_years,
+    j.expire_by,
+    j.url || '',
     format(new Date(j.created_at), 'yyyy-MM-dd HH:mm:ss'),
   ]);
 

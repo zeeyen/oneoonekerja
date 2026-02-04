@@ -4,7 +4,7 @@ import {
   useJobById,
   useCreateJob,
   useUpdateJob,
-  POSITION_OPTIONS,
+  INDUSTRY_OPTIONS,
   defaultJobFormData,
   type JobFormData,
 } from '@/hooks/useJobForm';
@@ -13,7 +13,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
@@ -30,7 +29,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { ArrowLeft, CalendarIcon, Loader2 } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, addDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 
@@ -48,64 +47,48 @@ export default function JobFormPage({ mode }: JobFormPageProps) {
   const updateJobMutation = useUpdateJob();
 
   const [formData, setFormData] = useState<JobFormData>(defaultJobFormData);
-  const [startDate, setStartDate] = useState<Date | undefined>();
-  const [endDate, setEndDate] = useState<Date | undefined>();
+  const [expireDate, setExpireDate] = useState<Date | undefined>();
 
   // Pre-fill form when editing
   useEffect(() => {
     if (isEditMode && existingJob) {
       setFormData({
-        job_title: existingJob.job_title,
-        position: existingJob.position,
-        job_type: existingJob.job_type,
-        hourly_rate: existingJob.hourly_rate,
-        branch_name: existingJob.branch_name || '',
-        location_city: existingJob.location_city || '',
+        title: existingJob.title,
+        company: existingJob.company || '',
         location_state: existingJob.location_state || '',
-        location_postcode: existingJob.location_postcode || '',
+        location_city: existingJob.location_city || '',
+        min_experience_years: existingJob.min_experience_years || 0,
+        salary_range: existingJob.salary_range || '',
         gender_requirement: existingJob.gender_requirement as 'any' | 'male' | 'female',
-        age_min: existingJob.age_min,
-        age_max: existingJob.age_max,
-        is_oku_friendly: existingJob.is_oku_friendly,
-        num_shifts: existingJob.num_shifts,
-        start_date: existingJob.start_date,
-        end_date: existingJob.end_date,
-        slots_available: existingJob.slots_available,
-        whatsapp_group_link: existingJob.whatsapp_group_link || '',
+        industry: existingJob.industry || '',
+        url: existingJob.url || '',
+        expire_by: existingJob.expire_by,
+        min_age: existingJob.min_age,
+        max_age: existingJob.max_age,
       });
-      if (existingJob.start_date) setStartDate(parseISO(existingJob.start_date));
-      if (existingJob.end_date) setEndDate(parseISO(existingJob.end_date));
+      if (existingJob.expire_by) setExpireDate(parseISO(existingJob.expire_by));
     }
   }, [isEditMode, existingJob]);
 
-  const handleInputChange = (field: keyof JobFormData, value: string | number | boolean | null) => {
+  const handleInputChange = (field: keyof JobFormData, value: string | number | null) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleDateChange = (field: 'start_date' | 'end_date', date: Date | undefined) => {
-    if (field === 'start_date') {
-      setStartDate(date);
-      handleInputChange('start_date', date ? format(date, 'yyyy-MM-dd') : null);
-    } else {
-      setEndDate(date);
-      handleInputChange('end_date', date ? format(date, 'yyyy-MM-dd') : null);
-    }
+  const handleExpireDateChange = (date: Date | undefined) => {
+    setExpireDate(date);
+    handleInputChange('expire_by', date ? format(date, 'yyyy-MM-dd') : '');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Validation
-    if (!formData.job_title.trim()) {
+    if (!formData.title.trim()) {
       toast({ title: 'Validation Error', description: 'Job title is required.', variant: 'destructive' });
       return;
     }
-    if (!formData.position) {
-      toast({ title: 'Validation Error', description: 'Position is required.', variant: 'destructive' });
-      return;
-    }
-    if (!formData.whatsapp_group_link.trim()) {
-      toast({ title: 'Validation Error', description: 'WhatsApp group link is required.', variant: 'destructive' });
+    if (!formData.expire_by) {
+      toast({ title: 'Validation Error', description: 'Expiry date is required.', variant: 'destructive' });
       return;
     }
 
@@ -177,71 +160,66 @@ export default function JobFormPage({ mode }: JobFormPageProps) {
           <CardContent className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="job_title">Job Title *</Label>
+                <Label htmlFor="title">Job Title *</Label>
                 <Input
-                  id="job_title"
-                  placeholder="e.g., Cashier at ABC Mall"
-                  value={formData.job_title}
-                  onChange={(e) => handleInputChange('job_title', e.target.value)}
+                  id="title"
+                  placeholder="e.g., Production Operator"
+                  value={formData.title}
+                  onChange={(e) => handleInputChange('title', e.target.value)}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="position">Position *</Label>
-                <Select
-                  value={formData.position}
-                  onValueChange={(value) => handleInputChange('position', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select position" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-background border shadow-lg z-50">
-                    {POSITION_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="company">Company *</Label>
+                <Input
+                  id="company"
+                  placeholder="e.g., ABC Manufacturing Sdn Bhd"
+                  value={formData.company}
+                  onChange={(e) => handleInputChange('company', e.target.value)}
+                  required
+                />
               </div>
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Job Type *</Label>
-                <RadioGroup
-                  value={formData.job_type?.toString() || '1'}
-                  onValueChange={(value) => handleInputChange('job_type', parseInt(value))}
-                  className="flex gap-4"
+                <Label htmlFor="industry">Industry</Label>
+                <Select
+                  value={formData.industry}
+                  onValueChange={(value) => handleInputChange('industry', value)}
                 >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="1" id="part_time" />
-                    <Label htmlFor="part_time" className="font-normal cursor-pointer">
-                      Part-time
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="2" id="full_time" />
-                    <Label htmlFor="full_time" className="font-normal cursor-pointer">
-                      Full-time
-                    </Label>
-                  </div>
-                </RadioGroup>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select industry" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background border shadow-lg z-50">
+                    {INDUSTRY_OPTIONS.map((industry) => (
+                      <SelectItem key={industry} value={industry}>
+                        {industry}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="hourly_rate">Hourly Rate (RM)</Label>
+                <Label htmlFor="salary_range">Salary Range</Label>
                 <Input
-                  id="hourly_rate"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="e.g., 12.00"
-                  value={formData.hourly_rate ?? ''}
-                  onChange={(e) =>
-                    handleInputChange('hourly_rate', e.target.value ? parseFloat(e.target.value) : null)
-                  }
+                  id="salary_range"
+                  placeholder="e.g., RM2000/month or RM65-115/day"
+                  value={formData.salary_range}
+                  onChange={(e) => handleInputChange('salary_range', e.target.value)}
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="url">Job URL (optional)</Label>
+              <Input
+                id="url"
+                type="url"
+                placeholder="https://101kerja.com/jobs/..."
+                value={formData.url}
+                onChange={(e) => handleInputChange('url', e.target.value)}
+              />
             </div>
           </CardContent>
         </Card>
@@ -252,26 +230,6 @@ export default function JobFormPage({ mode }: JobFormPageProps) {
             <CardTitle>Location</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="branch_name">Branch Name</Label>
-                <Input
-                  id="branch_name"
-                  placeholder="e.g., ABC Mall Bukit Bintang"
-                  value={formData.branch_name}
-                  onChange={(e) => handleInputChange('branch_name', e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="location_city">City</Label>
-                <Input
-                  id="location_city"
-                  placeholder="e.g., Kuala Lumpur"
-                  value={formData.location_city}
-                  onChange={(e) => handleInputChange('location_city', e.target.value)}
-                />
-              </div>
-            </div>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="location_state">State</Label>
@@ -292,12 +250,12 @@ export default function JobFormPage({ mode }: JobFormPageProps) {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="location_postcode">Postcode</Label>
+                <Label htmlFor="location_city">City</Label>
                 <Input
-                  id="location_postcode"
-                  placeholder="e.g., 50100"
-                  value={formData.location_postcode}
-                  onChange={(e) => handleInputChange('location_postcode', e.target.value)}
+                  id="location_city"
+                  placeholder="e.g., Shah Alam"
+                  value={formData.location_city}
+                  onChange={(e) => handleInputChange('location_city', e.target.value)}
                 />
               </div>
             </div>
@@ -340,160 +298,118 @@ export default function JobFormPage({ mode }: JobFormPageProps) {
               </RadioGroup>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid md:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="age_min">Minimum Age</Label>
+                <Label htmlFor="min_experience_years">Min. Experience (years)</Label>
                 <Input
-                  id="age_min"
+                  id="min_experience_years"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={formData.min_experience_years}
+                  onChange={(e) =>
+                    handleInputChange('min_experience_years', parseInt(e.target.value) || 0)
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="min_age">Minimum Age</Label>
+                <Input
+                  id="min_age"
                   type="number"
                   min="16"
                   max="100"
                   placeholder="e.g., 18"
-                  value={formData.age_min ?? ''}
+                  value={formData.min_age ?? ''}
                   onChange={(e) =>
-                    handleInputChange('age_min', e.target.value ? parseInt(e.target.value) : null)
+                    handleInputChange('min_age', e.target.value ? parseInt(e.target.value) : null)
                   }
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="age_max">Maximum Age</Label>
+                <Label htmlFor="max_age">Maximum Age</Label>
                 <Input
-                  id="age_max"
+                  id="max_age"
                   type="number"
                   min="16"
                   max="100"
                   placeholder="e.g., 45"
-                  value={formData.age_max ?? ''}
+                  value={formData.max_age ?? ''}
                   onChange={(e) =>
-                    handleInputChange('age_max', e.target.value ? parseInt(e.target.value) : null)
+                    handleInputChange('max_age', e.target.value ? parseInt(e.target.value) : null)
                   }
                 />
               </div>
             </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="is_oku_friendly"
-                checked={formData.is_oku_friendly}
-                onCheckedChange={(checked) => handleInputChange('is_oku_friendly', checked === true)}
-              />
-              <Label htmlFor="is_oku_friendly" className="font-normal cursor-pointer">
-                OKU Friendly (suitable for persons with disabilities)
-              </Label>
-            </div>
           </CardContent>
         </Card>
 
-        {/* Schedule */}
+        {/* Expiry */}
         <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle>Schedule</CardTitle>
+            <CardTitle>Listing Expiry</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="num_shifts">Number of Shifts</Label>
-                <Input
-                  id="num_shifts"
-                  type="number"
-                  min="1"
-                  placeholder="e.g., 3"
-                  value={formData.num_shifts ?? ''}
-                  onChange={(e) =>
-                    handleInputChange('num_shifts', e.target.value ? parseInt(e.target.value) : null)
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="slots_available">Slots Available</Label>
-                <Input
-                  id="slots_available"
-                  type="number"
-                  min="1"
-                  placeholder="e.g., 10"
-                  value={formData.slots_available}
-                  onChange={(e) =>
-                    handleInputChange('slots_available', parseInt(e.target.value) || 1)
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Start Date</Label>
+                <Label>Expire By *</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
                       className={cn(
                         'w-full justify-start text-left font-normal',
-                        !startDate && 'text-muted-foreground'
+                        !expireDate && 'text-muted-foreground'
                       )}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
-                      {startDate ? format(startDate, 'PPP') : <span>Pick a date</span>}
+                      {expireDate ? format(expireDate, 'PPP') : <span>Pick a date</span>}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
                       mode="single"
-                      selected={startDate}
-                      onSelect={(date) => handleDateChange('start_date', date)}
+                      selected={expireDate}
+                      onSelect={handleExpireDateChange}
+                      disabled={(date) => date < new Date()}
                       initialFocus
                       className={cn('p-3 pointer-events-auto')}
                     />
                   </PopoverContent>
                 </Popover>
+                <p className="text-sm text-muted-foreground">
+                  The job listing will be marked as expired after this date.
+                </p>
               </div>
               <div className="space-y-2">
-                <Label>End Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        'w-full justify-start text-left font-normal',
-                        !endDate && 'text-muted-foreground'
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {endDate ? format(endDate, 'PPP') : <span>Pick a date</span>}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={endDate}
-                      onSelect={(date) => handleDateChange('end_date', date)}
-                      initialFocus
-                      className={cn('p-3 pointer-events-auto')}
-                    />
-                  </PopoverContent>
-                </Popover>
+                <Label>Quick Set</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleExpireDateChange(addDays(new Date(), 30))}
+                  >
+                    30 days
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleExpireDateChange(addDays(new Date(), 60))}
+                  >
+                    60 days
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleExpireDateChange(addDays(new Date(), 90))}
+                  >
+                    90 days
+                  </Button>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* WhatsApp */}
-        <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle>WhatsApp</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="whatsapp_group_link">WhatsApp Group Link *</Label>
-              <Input
-                id="whatsapp_group_link"
-                placeholder="https://chat.whatsapp.com/..."
-                value={formData.whatsapp_group_link}
-                onChange={(e) => handleInputChange('whatsapp_group_link', e.target.value)}
-                required
-              />
-              <p className="text-sm text-muted-foreground">
-                The group link candidates will join after verification.
-              </p>
             </div>
           </CardContent>
         </Card>
