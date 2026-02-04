@@ -19,7 +19,6 @@ interface ConversationsResult {
 
 interface ConversationStats {
   totalMessagesToday: number;
-  totalTokensToday: number;
   avgProcessingTime: number;
 }
 
@@ -72,7 +71,7 @@ async function fetchConversationStats(): Promise<ConversationStats> {
 
   const { data, error } = await supabase
     .from('conversations')
-    .select('llm_tokens_used, processing_time_ms')
+    .select('processing_time_ms')
     .gte('created_at', startOfToday)
     .lte('created_at', endOfToday);
 
@@ -82,7 +81,6 @@ async function fetchConversationStats(): Promise<ConversationStats> {
   }
 
   const totalMessagesToday = data?.length || 0;
-  const totalTokensToday = data?.reduce((sum, c) => sum + (c.llm_tokens_used || 0), 0) || 0;
   const processingTimes = data?.filter((c) => c.processing_time_ms != null).map((c) => c.processing_time_ms!) || [];
   const avgProcessingTime =
     processingTimes.length > 0
@@ -91,7 +89,6 @@ async function fetchConversationStats(): Promise<ConversationStats> {
 
   return {
     totalMessagesToday,
-    totalTokensToday,
     avgProcessingTime,
   };
 }
@@ -141,14 +138,13 @@ export function useConversationStats() {
 }
 
 export function exportConversationsToCSV(conversations: Conversation[]): void {
-  const headers = ['Time', 'Phone', 'Direction', 'Type', 'Message', 'Tokens', 'Processing Time (ms)'];
+  const headers = ['Time', 'Phone', 'Direction', 'Type', 'Message', 'Processing Time (ms)'];
   const rows = conversations.map((c) => [
     format(new Date(c.created_at), 'yyyy-MM-dd HH:mm:ss'),
     c.phone_number,
     c.direction,
     c.message_type,
     `"${(c.message_content || '').replace(/"/g, '""')}"`,
-    c.llm_tokens_used,
     c.processing_time_ms || '',
   ]);
 
