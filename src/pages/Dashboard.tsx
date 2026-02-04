@@ -46,8 +46,8 @@ export default function Dashboard() {
 
   const statCards = [
     {
-      title: 'Total Users',
-      value: stats?.totalUsers ?? 0,
+      title: 'Total Applicants',
+      value: stats?.totalApplicants ?? 0,
       icon: Users,
       description: 'Registered job seekers',
       color: 'text-blue-600',
@@ -57,7 +57,7 @@ export default function Dashboard() {
       title: 'Active Today',
       value: stats?.activeToday ?? 0,
       icon: Clock,
-      description: 'Users active today',
+      description: 'Applicants active today',
       color: 'text-emerald-600',
       bgColor: 'bg-emerald-50',
     },
@@ -174,7 +174,7 @@ export default function Dashboard() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>User Name</TableHead>
+                      <TableHead>Applicant Name</TableHead>
                       <TableHead>Phone</TableHead>
                       <TableHead>Job Title</TableHead>
                       <TableHead>Token</TableHead>

@@ -6,9 +6,9 @@ import {
   useUpdateAdminRole,
   useToggleAdminStatus,
   useSystemStats,
-  fetchAllUsersForExport,
+  fetchAllApplicantsForExport,
   fetchAllJobsForExport,
-  exportUsersToCSV,
+  exportApplicantsToCSV,
   exportJobsToCSV,
 } from '@/hooks/useSettings';
 import { AddAdminModal } from '@/components/AddAdminModal';
@@ -59,7 +59,7 @@ export default function SettingsPage() {
   const toggleStatusMutation = useToggleAdminStatus();
 
   const [addModalOpen, setAddModalOpen] = useState(false);
-  const [exportingUsers, setExportingUsers] = useState(false);
+  const [exportingApplicants, setExportingApplicants] = useState(false);
   const [exportingJobs, setExportingJobs] = useState(false);
 
   const handleRoleChange = async (adminId: string, newRole: 'admin' | 'staff') => {
@@ -89,16 +89,16 @@ export default function SettingsPage() {
     }
   };
 
-  const handleExportUsers = async () => {
-    setExportingUsers(true);
+  const handleExportApplicants = async () => {
+    setExportingApplicants(true);
     try {
-      const users = await fetchAllUsersForExport();
-      exportUsersToCSV(users);
-      toast({ title: 'Success', description: `Exported ${users.length} users.` });
+      const applicants = await fetchAllApplicantsForExport();
+      exportApplicantsToCSV(applicants);
+      toast({ title: 'Success', description: `Exported ${applicants.length} applicants.` });
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to export users.', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Failed to export applicants.', variant: 'destructive' });
     } finally {
-      setExportingUsers(false);
+      setExportingApplicants(false);
     }
   };
 
@@ -145,7 +145,7 @@ export default function SettingsPage() {
           <Card className="shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Users
+                Total Applicants
               </CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
@@ -153,7 +153,7 @@ export default function SettingsPage() {
               {statsLoading ? (
                 <Skeleton className="h-8 w-16" />
               ) : (
-                <div className="text-2xl font-bold">{stats?.totalUsers.toLocaleString()}</div>
+                <div className="text-2xl font-bold">{stats?.totalApplicants.toLocaleString()}</div>
               )}
             </CardContent>
           </Card>
@@ -312,13 +312,13 @@ export default function SettingsPage() {
       <div>
         <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
         <div className="flex flex-wrap gap-4">
-          <Button variant="outline" onClick={handleExportUsers} disabled={exportingUsers}>
-            {exportingUsers ? (
+          <Button variant="outline" onClick={handleExportApplicants} disabled={exportingApplicants}>
+            {exportingApplicants ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <Download className="mr-2 h-4 w-4" />
             )}
-            Export All Users
+            Export All Applicants
           </Button>
           <Button variant="outline" onClick={handleExportJobs} disabled={exportingJobs}>
             {exportingJobs ? (

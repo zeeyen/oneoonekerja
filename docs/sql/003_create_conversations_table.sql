@@ -7,8 +7,8 @@
 CREATE TABLE public.conversations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   
-  -- User Reference (nullable for unknown users)
-  user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  -- Applicant Reference (nullable for unknown applicants)
+  user_id UUID REFERENCES public.applicants(id) ON DELETE SET NULL,
   phone_number TEXT NOT NULL,
   
   -- Message Details

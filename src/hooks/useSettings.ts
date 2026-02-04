@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import type { AdminUser, User, Job } from '@/types/database';
+import type { AdminUser, Applicant, Job } from '@/types/database';
 import { startOfMonth, endOfMonth, format } from 'date-fns';
 
 // Fetch all admin users
@@ -83,7 +83,7 @@ async function toggleAdminStatus(params: {
 
 // Fetch system stats
 interface SystemStats {
-  totalUsers: number;
+  totalApplicants: number;
   messagesThisMonth: number;
   tokensThisMonth: number;
   handoversByStatus: Record<string, number>;
@@ -94,9 +94,9 @@ async function fetchSystemStats(): Promise<SystemStats> {
   const monthStart = startOfMonth(now).toISOString();
   const monthEnd = endOfMonth(now).toISOString();
 
-  // Fetch total users
-  const { count: totalUsers } = await supabase
-    .from('users')
+  // Fetch total applicants
+  const { count: totalApplicants } = await supabase
+    .from('applicants')
     .select('*', { count: 'exact', head: true });
 
   // Fetch messages and tokens this month
@@ -120,22 +120,22 @@ async function fetchSystemStats(): Promise<SystemStats> {
   });
 
   return {
-    totalUsers: totalUsers || 0,
+    totalApplicants: totalApplicants || 0,
     messagesThisMonth,
     tokensThisMonth,
     handoversByStatus,
   };
 }
 
-// Fetch all users for export
-async function fetchAllUsersForExport(): Promise<User[]> {
+// Fetch all applicants for export
+async function fetchAllApplicantsForExport(): Promise<Applicant[]> {
   const { data, error } = await supabase
-    .from('users')
+    .from('applicants')
     .select('*')
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching users for export:', error);
+    console.error('Error fetching applicants for export:', error);
     throw error;
   }
 
@@ -158,36 +158,36 @@ async function fetchAllJobsForExport(): Promise<Job[]> {
 }
 
 // Export functions
-export function exportUsersToCSV(users: User[]): void {
+export function exportApplicantsToCSV(applicants: Applicant[]): void {
   const headers = [
     'ID', 'Phone', 'IC', 'Name', 'Age', 'Gender', 'Language',
     'City', 'State', 'Postcode', 'Job Types', 'Positions',
     'Years Exp', 'Has Transport', 'Transport Type', 'OKU',
     'Onboarding Status', 'Is Active', 'Created At',
   ];
-  const rows = users.map((u) => [
-    u.id,
-    u.phone_number,
-    u.ic_number || '',
-    u.full_name || '',
-    u.age || '',
-    u.gender || '',
-    u.preferred_language,
-    u.location_city || '',
-    u.location_state || '',
-    u.location_postcode || '',
-    u.preferred_job_types?.join(';') || '',
-    u.preferred_positions?.join(';') || '',
-    u.years_experience,
-    u.has_transport ? 'Yes' : 'No',
-    u.transport_type || '',
-    u.is_oku ? 'Yes' : 'No',
-    u.onboarding_status,
-    u.is_active ? 'Yes' : 'No',
-    format(new Date(u.created_at), 'yyyy-MM-dd HH:mm:ss'),
+  const rows = applicants.map((a) => [
+    a.id,
+    a.phone_number,
+    a.ic_number || '',
+    a.full_name || '',
+    a.age || '',
+    a.gender || '',
+    a.preferred_language,
+    a.location_city || '',
+    a.location_state || '',
+    a.location_postcode || '',
+    a.preferred_job_types?.join(';') || '',
+    a.preferred_positions?.join(';') || '',
+    a.years_experience,
+    a.has_transport ? 'Yes' : 'No',
+    a.transport_type || '',
+    a.is_oku ? 'Yes' : 'No',
+    a.onboarding_status,
+    a.is_active ? 'Yes' : 'No',
+    format(new Date(a.created_at), 'yyyy-MM-dd HH:mm:ss'),
   ]);
 
-  downloadCSV(headers, rows, 'users');
+  downloadCSV(headers, rows, 'applicants');
 }
 
 export function exportJobsToCSV(jobs: Job[]): void {
@@ -277,4 +277,4 @@ export function useSystemStats() {
   });
 }
 
-export { fetchAllUsersForExport, fetchAllJobsForExport };
+export { fetchAllApplicantsForExport, fetchAllJobsForExport };

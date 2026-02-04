@@ -8,7 +8,7 @@ CREATE TABLE public.job_matches (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   
   -- References
-  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.applicants(id) ON DELETE CASCADE,
   job_id UUID NOT NULL REFERENCES public.jobs(id) ON DELETE CASCADE,
   
   -- Match Details

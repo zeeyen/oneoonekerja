@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import type { User, JobMatch, Handover, Conversation, Job } from '@/types/database';
+import type { Applicant, JobMatch, Handover, Conversation, Job } from '@/types/database';
 
 export interface JobMatchWithJob extends JobMatch {
   job?: Pick<Job, 'job_title' | 'position'>;
@@ -10,29 +10,29 @@ export interface HandoverWithJob extends Handover {
   job?: Pick<Job, 'job_title' | 'position'>;
 }
 
-async function fetchUserById(id: string): Promise<User | null> {
+async function fetchApplicantById(id: string): Promise<Applicant | null> {
   const { data, error } = await supabase
-    .from('users')
+    .from('applicants')
     .select('*')
     .eq('id', id)
     .maybeSingle();
 
   if (error) {
-    console.error('Error fetching user:', error);
+    console.error('Error fetching applicant:', error);
     throw error;
   }
 
   return data;
 }
 
-async function fetchUserJobMatches(userId: string): Promise<JobMatchWithJob[]> {
+async function fetchApplicantJobMatches(applicantId: string): Promise<JobMatchWithJob[]> {
   const { data, error } = await supabase
     .from('job_matches')
     .select(`
       *,
       job:jobs(job_title, position)
     `)
-    .eq('user_id', userId)
+    .eq('user_id', applicantId)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -46,14 +46,14 @@ async function fetchUserJobMatches(userId: string): Promise<JobMatchWithJob[]> {
   }));
 }
 
-async function fetchUserHandovers(userId: string): Promise<HandoverWithJob[]> {
+async function fetchApplicantHandovers(applicantId: string): Promise<HandoverWithJob[]> {
   const { data, error } = await supabase
     .from('handovers')
     .select(`
       *,
       job:jobs(job_title, position)
     `)
-    .eq('user_id', userId)
+    .eq('user_id', applicantId)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -67,15 +67,15 @@ async function fetchUserHandovers(userId: string): Promise<HandoverWithJob[]> {
   }));
 }
 
-async function fetchUserConversations(userId: string, phoneNumber?: string): Promise<Conversation[]> {
+async function fetchApplicantConversations(applicantId: string, phoneNumber?: string): Promise<Conversation[]> {
   let query = supabase
     .from('conversations')
     .select('*')
     .order('created_at', { ascending: true });
 
   // Try by user_id first, fallback to phone_number
-  if (userId) {
-    query = query.eq('user_id', userId);
+  if (applicantId) {
+    query = query.eq('user_id', applicantId);
   }
 
   const { data, error } = await query;
@@ -104,34 +104,34 @@ async function fetchUserConversations(userId: string, phoneNumber?: string): Pro
   return data ?? [];
 }
 
-export function useUserDetail(id: string) {
+export function useApplicantDetail(id: string) {
   return useQuery({
-    queryKey: ['user', id],
-    queryFn: () => fetchUserById(id),
+    queryKey: ['applicant', id],
+    queryFn: () => fetchApplicantById(id),
     enabled: !!id,
   });
 }
 
-export function useUserJobMatches(userId: string) {
+export function useApplicantJobMatches(applicantId: string) {
   return useQuery({
-    queryKey: ['user-job-matches', userId],
-    queryFn: () => fetchUserJobMatches(userId),
-    enabled: !!userId,
+    queryKey: ['applicant-job-matches', applicantId],
+    queryFn: () => fetchApplicantJobMatches(applicantId),
+    enabled: !!applicantId,
   });
 }
 
-export function useUserHandovers(userId: string) {
+export function useApplicantHandovers(applicantId: string) {
   return useQuery({
-    queryKey: ['user-handovers', userId],
-    queryFn: () => fetchUserHandovers(userId),
-    enabled: !!userId,
+    queryKey: ['applicant-handovers', applicantId],
+    queryFn: () => fetchApplicantHandovers(applicantId),
+    enabled: !!applicantId,
   });
 }
 
-export function useUserConversations(userId: string, phoneNumber?: string) {
+export function useApplicantConversations(applicantId: string, phoneNumber?: string) {
   return useQuery({
-    queryKey: ['user-conversations', userId, phoneNumber],
-    queryFn: () => fetchUserConversations(userId, phoneNumber),
-    enabled: !!userId || !!phoneNumber,
+    queryKey: ['applicant-conversations', applicantId, phoneNumber],
+    queryFn: () => fetchApplicantConversations(applicantId, phoneNumber),
+    enabled: !!applicantId || !!phoneNumber,
   });
 }

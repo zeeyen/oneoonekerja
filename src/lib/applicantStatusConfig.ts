@@ -1,6 +1,6 @@
-import type { User } from '@/types/database';
+import type { Applicant } from '@/types/database';
 
-type OnboardingStatus = User['onboarding_status'];
+type OnboardingStatus = Applicant['onboarding_status'];
 
 interface StatusConfig {
   label: string;

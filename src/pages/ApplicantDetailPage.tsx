@@ -1,11 +1,11 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  useUserDetail,
-  useUserJobMatches,
-  useUserHandovers,
-  useUserConversations,
-} from '@/hooks/useUserDetail';
-import { getOnboardingStatusConfig } from '@/lib/userStatusConfig';
+  useApplicantDetail,
+  useApplicantJobMatches,
+  useApplicantHandovers,
+  useApplicantConversations,
+} from '@/hooks/useApplicantDetail';
+import { getOnboardingStatusConfig } from '@/lib/applicantStatusConfig';
 import { getStatusConfig } from '@/lib/statusConfig';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,19 +46,19 @@ const jobTypeLabels: Record<string, string> = {
   full_time: 'Full-time',
 };
 
-export default function UserDetailPage() {
+export default function ApplicantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const { data: user, isLoading: userLoading } = useUserDetail(id!);
-  const { data: jobMatches, isLoading: matchesLoading } = useUserJobMatches(id!);
-  const { data: handovers, isLoading: handoversLoading } = useUserHandovers(id!);
-  const { data: conversations, isLoading: conversationsLoading } = useUserConversations(
+  const { data: applicant, isLoading: applicantLoading } = useApplicantDetail(id!);
+  const { data: jobMatches, isLoading: matchesLoading } = useApplicantJobMatches(id!);
+  const { data: handovers, isLoading: handoversLoading } = useApplicantHandovers(id!);
+  const { data: conversations, isLoading: conversationsLoading } = useApplicantConversations(
     id!,
-    user?.phone_number
+    applicant?.phone_number
   );
 
-  if (userLoading) {
+  if (applicantLoading) {
     return (
       <div className="animate-fade-in space-y-6">
         <Skeleton className="h-10 w-32" />
@@ -68,23 +68,23 @@ export default function UserDetailPage() {
     );
   }
 
-  if (!user) {
+  if (!applicant) {
     return (
       <div className="animate-fade-in">
-        <Button variant="ghost" onClick={() => navigate('/users')} className="mb-6">
+        <Button variant="ghost" onClick={() => navigate('/applicants')} className="mb-6">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Users
+          Back to Applicants
         </Button>
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <p className="text-muted-foreground">User not found</p>
+            <p className="text-muted-foreground">Applicant not found</p>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  const statusConfig = getOnboardingStatusConfig(user.onboarding_status);
+  const statusConfig = getOnboardingStatusConfig(applicant.onboarding_status);
 
   const formatAvailability = (availability: Record<string, boolean>) => {
     const slots = Object.entries(availability)
@@ -96,9 +96,9 @@ export default function UserDetailPage() {
   return (
     <div className="animate-fade-in space-y-6">
       {/* Back button */}
-      <Button variant="ghost" onClick={() => navigate('/users')} className="mb-2">
+      <Button variant="ghost" onClick={() => navigate('/applicants')} className="mb-2">
         <ArrowLeft className="mr-2 h-4 w-4" />
-        Back to Users
+        Back to Applicants
       </Button>
 
       {/* Header section */}
@@ -107,22 +107,22 @@ export default function UserDetailPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-foreground">
-                {user.full_name || 'Unknown User'}
+                {applicant.full_name || 'Unknown Applicant'}
               </h1>
               <div className="flex items-center gap-2 mt-2 text-muted-foreground">
                 <Phone className="h-4 w-4" />
-                <span className="font-mono">{user.phone_number}</span>
+                <span className="font-mono">{applicant.phone_number}</span>
               </div>
             </div>
             <div className="flex items-center gap-3">
               <Badge className={statusConfig.className}>{statusConfig.label}</Badge>
-              {user.is_active ? (
-                <Badge className="bg-green-100 text-green-800 border-green-200">
+              {applicant.is_active ? (
+                <Badge className="bg-success/10 text-success border-success/20">
                   <CheckCircle className="mr-1 h-3 w-3" />
                   Active
                 </Badge>
               ) : (
-                <Badge className="bg-gray-100 text-gray-800 border-gray-200">
+                <Badge className="bg-muted text-muted-foreground border-muted">
                   <XCircle className="mr-1 h-3 w-3" />
                   Inactive
                 </Badge>
@@ -143,19 +143,19 @@ export default function UserDetailPage() {
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-muted-foreground">IC Number</label>
-                <p className="mt-1 font-mono">{user.ic_number || '-'}</p>
+                <p className="mt-1 font-mono">{applicant.ic_number || '-'}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Age</label>
-                <p className="mt-1">{user.age ? `${user.age} years old` : '-'}</p>
+                <p className="mt-1">{applicant.age ? `${applicant.age} years old` : '-'}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Gender</label>
-                <p className="mt-1 capitalize">{user.gender || '-'}</p>
+                <p className="mt-1 capitalize">{applicant.gender || '-'}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Preferred Language</label>
-                <p className="mt-1">{languageLabels[user.preferred_language] || user.preferred_language}</p>
+                <p className="mt-1">{languageLabels[applicant.preferred_language] || applicant.preferred_language}</p>
               </div>
             </div>
 
@@ -167,7 +167,7 @@ export default function UserDetailPage() {
                   Location
                 </label>
                 <p className="mt-1">
-                  {[user.location_city, user.location_state, user.location_postcode]
+                  {[applicant.location_city, applicant.location_state, applicant.location_postcode]
                     .filter(Boolean)
                     .join(', ') || '-'}
                 </p>
@@ -178,8 +178,8 @@ export default function UserDetailPage() {
                   Transport
                 </label>
                 <p className="mt-1">
-                  {user.has_transport
-                    ? `Yes${user.transport_type ? ` (${user.transport_type})` : ''}`
+                  {applicant.has_transport
+                    ? `Yes${applicant.transport_type ? ` (${applicant.transport_type})` : ''}`
                     : 'No'}
                 </p>
               </div>
@@ -188,14 +188,14 @@ export default function UserDetailPage() {
                   <Accessibility className="h-4 w-4" />
                   OKU Status
                 </label>
-                <p className="mt-1">{user.is_oku ? 'Yes' : 'No'}</p>
+                <p className="mt-1">{applicant.is_oku ? 'Yes' : 'No'}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                   <Briefcase className="h-4 w-4" />
                   Years Experience
                 </label>
-                <p className="mt-1">{user.years_experience} years</p>
+                <p className="mt-1">{applicant.years_experience} years</p>
               </div>
             </div>
           </div>
@@ -211,8 +211,8 @@ export default function UserDetailPage() {
           <div>
             <label className="text-sm font-medium text-muted-foreground">Job Types</label>
             <div className="flex flex-wrap gap-2 mt-2">
-              {user.preferred_job_types.length > 0 ? (
-                user.preferred_job_types.map((type) => (
+              {applicant.preferred_job_types.length > 0 ? (
+                applicant.preferred_job_types.map((type) => (
                   <Badge key={type} variant="secondary">
                     {jobTypeLabels[type] || type}
                   </Badge>
@@ -225,8 +225,8 @@ export default function UserDetailPage() {
           <div>
             <label className="text-sm font-medium text-muted-foreground">Preferred Positions</label>
             <div className="flex flex-wrap gap-2 mt-2">
-              {user.preferred_positions.length > 0 ? (
-                user.preferred_positions.map((position) => (
+              {applicant.preferred_positions.length > 0 ? (
+                applicant.preferred_positions.map((position) => (
                   <Badge key={position} variant="outline" className="capitalize">
                     {position}
                   </Badge>
@@ -242,8 +242,8 @@ export default function UserDetailPage() {
               Availability
             </label>
             <div className="flex flex-wrap gap-2 mt-2">
-              {formatAvailability(user.availability).map((slot) => (
-                <Badge key={slot} variant="outline" className="bg-blue-50">
+              {formatAvailability(applicant.availability).map((slot) => (
+                <Badge key={slot} variant="outline" className="bg-info/10">
                   {slot}
                 </Badge>
               ))}
@@ -349,7 +349,7 @@ export default function UserDetailPage() {
                     </TableHeader>
                     <TableBody>
                       {handovers.map((handover) => {
-                        const statusConfig = getStatusConfig(handover.status);
+                        const handoverStatusConfig = getStatusConfig(handover.status);
                         return (
                           <TableRow
                             key={handover.id}
@@ -365,8 +365,8 @@ export default function UserDetailPage() {
                               </code>
                             </TableCell>
                             <TableCell>
-                              <Badge className={statusConfig.className}>
-                                {statusConfig.label}
+                              <Badge className={handoverStatusConfig.className}>
+                                {handoverStatusConfig.label}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-muted-foreground text-sm">

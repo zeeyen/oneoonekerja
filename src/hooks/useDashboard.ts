@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import type { HandoverWithDetails } from '@/types/database';
 
 interface DashboardStats {
-  totalUsers: number;
+  totalApplicants: number;
   activeToday: number;
   pendingVerification: number;
   activeJobs: number;
@@ -14,15 +14,15 @@ async function fetchDashboardStats(): Promise<DashboardStats> {
   today.setHours(0, 0, 0, 0);
   const todayISO = today.toISOString();
 
-  const [usersResult, activeTodayResult, pendingResult, jobsResult] = await Promise.all([
-    supabase.from('users').select('*', { count: 'exact', head: true }),
-    supabase.from('users').select('*', { count: 'exact', head: true }).gte('last_active_at', todayISO),
+  const [applicantsResult, activeTodayResult, pendingResult, jobsResult] = await Promise.all([
+    supabase.from('applicants').select('*', { count: 'exact', head: true }),
+    supabase.from('applicants').select('*', { count: 'exact', head: true }).gte('last_active_at', todayISO),
     supabase.from('handovers').select('*', { count: 'exact', head: true }).eq('status', 'pending_verification'),
     supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('is_active', true),
   ]);
 
   return {
-    totalUsers: usersResult.count ?? 0,
+    totalApplicants: applicantsResult.count ?? 0,
     activeToday: activeTodayResult.count ?? 0,
     pendingVerification: pendingResult.count ?? 0,
     activeJobs: jobsResult.count ?? 0,
@@ -34,7 +34,7 @@ async function fetchRecentHandovers(): Promise<HandoverWithDetails[]> {
     .from('handovers')
     .select(`
       *,
-      user:users(full_name, phone_number),
+      user:applicants(full_name, phone_number),
       job:jobs(job_title, position)
     `)
     .order('created_at', { ascending: false })

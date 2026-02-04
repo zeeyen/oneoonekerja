@@ -1,30 +1,30 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import type { User } from '@/types/database';
+import type { Applicant } from '@/types/database';
 
-export type UserFilter = 'all' | 'active' | 'completed' | 'in_progress' | 'new';
+export type ApplicantFilter = 'all' | 'active' | 'completed' | 'in_progress' | 'new';
 
-interface UseUsersOptions {
+interface UseApplicantsOptions {
   search: string;
-  filter: UserFilter;
+  filter: ApplicantFilter;
   page: number;
   pageSize: number;
 }
 
-interface UsersResult {
-  users: User[];
+interface ApplicantsResult {
+  applicants: Applicant[];
   totalCount: number;
   totalPages: number;
 }
 
-async function fetchUsers({
+async function fetchApplicants({
   search,
   filter,
   page,
   pageSize,
-}: UseUsersOptions): Promise<UsersResult> {
+}: UseApplicantsOptions): Promise<ApplicantsResult> {
   let query = supabase
-    .from('users')
+    .from('applicants')
     .select('*', { count: 'exact' });
 
   // Apply search filter
@@ -62,42 +62,42 @@ async function fetchUsers({
   const { data, count, error } = await query;
 
   if (error) {
-    console.error('Error fetching users:', error);
+    console.error('Error fetching applicants:', error);
     throw error;
   }
 
   return {
-    users: data ?? [],
+    applicants: data ?? [],
     totalCount: count ?? 0,
     totalPages: Math.ceil((count ?? 0) / pageSize),
   };
 }
 
-export function useUsers(options: UseUsersOptions) {
+export function useApplicants(options: UseApplicantsOptions) {
   return useQuery({
-    queryKey: ['users', options],
-    queryFn: () => fetchUsers(options),
+    queryKey: ['applicants', options],
+    queryFn: () => fetchApplicants(options),
     staleTime: 30000,
   });
 }
 
-export async function fetchTotalUsersCount(): Promise<number> {
+export async function fetchTotalApplicantsCount(): Promise<number> {
   const { count, error } = await supabase
-    .from('users')
+    .from('applicants')
     .select('*', { count: 'exact', head: true });
 
   if (error) {
-    console.error('Error fetching users count:', error);
+    console.error('Error fetching applicants count:', error);
     return 0;
   }
 
   return count ?? 0;
 }
 
-export function useTotalUsersCount() {
+export function useTotalApplicantsCount() {
   return useQuery({
-    queryKey: ['users-total-count'],
-    queryFn: fetchTotalUsersCount,
+    queryKey: ['applicants-total-count'],
+    queryFn: fetchTotalApplicantsCount,
     staleTime: 60000,
   });
 }

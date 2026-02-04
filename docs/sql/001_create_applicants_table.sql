@@ -1,10 +1,10 @@
 -- =============================================
--- 101Kerja: Job Seekers (users) Table
+-- 101Kerja: Job Seekers (applicants) Table
 -- Run this in Supabase SQL Editor
 -- =============================================
 
--- Create the users table for job seeker profiles
-CREATE TABLE public.users (
+-- Create the applicants table for job seeker profiles
+CREATE TABLE public.applicants (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   
   -- Contact & Identity
@@ -46,32 +46,32 @@ CREATE TABLE public.users (
 );
 
 -- Create indexes for common queries
-CREATE INDEX idx_users_phone_number ON public.users(phone_number);
-CREATE INDEX idx_users_is_active ON public.users(is_active);
-CREATE INDEX idx_users_onboarding_status ON public.users(onboarding_status);
+CREATE INDEX idx_applicants_phone_number ON public.applicants(phone_number);
+CREATE INDEX idx_applicants_is_active ON public.applicants(is_active);
+CREATE INDEX idx_applicants_onboarding_status ON public.applicants(onboarding_status);
 
 -- Enable Row Level Security
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.applicants ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policy: Allow all operations for authenticated users (admin dashboard)
-CREATE POLICY "Authenticated users can view all users"
-  ON public.users FOR SELECT
+CREATE POLICY "Authenticated users can view all applicants"
+  ON public.applicants FOR SELECT
   TO authenticated
   USING (true);
 
-CREATE POLICY "Authenticated users can insert users"
-  ON public.users FOR INSERT
+CREATE POLICY "Authenticated users can insert applicants"
+  ON public.applicants FOR INSERT
   TO authenticated
   WITH CHECK (true);
 
-CREATE POLICY "Authenticated users can update users"
-  ON public.users FOR UPDATE
+CREATE POLICY "Authenticated users can update applicants"
+  ON public.applicants FOR UPDATE
   TO authenticated
   USING (true)
   WITH CHECK (true);
 
-CREATE POLICY "Authenticated users can delete users"
-  ON public.users FOR DELETE
+CREATE POLICY "Authenticated users can delete applicants"
+  ON public.applicants FOR DELETE
   TO authenticated
   USING (true);
 
@@ -85,10 +85,10 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger for auto-updating updated_at
-CREATE TRIGGER set_users_updated_at
-  BEFORE UPDATE ON public.users
+CREATE TRIGGER set_applicants_updated_at
+  BEFORE UPDATE ON public.applicants
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_updated_at();
 
 -- Add table comment
-COMMENT ON TABLE public.users IS 'Job seeker profiles registered via WhatsApp chatbot';
+COMMENT ON TABLE public.applicants IS 'Job seeker profiles registered via WhatsApp chatbot';

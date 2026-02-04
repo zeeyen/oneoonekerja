@@ -65,7 +65,7 @@ function AppSidebar() {
 
   const mainNavItems = [
     { title: 'Dashboard', url: '/', icon: LayoutDashboard },
-    { title: 'Users', url: '/users', icon: Users },
+    { title: 'Applicants', url: '/applicants', icon: Users },
     { title: 'Jobs', url: '/jobs', icon: Briefcase },
     { 
       title: 'Handovers', 

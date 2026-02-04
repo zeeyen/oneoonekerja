@@ -429,7 +429,7 @@ export function HandoverDetailModal({
         {/* Footer */}
         <div className="px-6 py-4 border-t flex justify-between">
           <Button variant="outline" asChild>
-            <Link to={`/users/${handover.user_id}`} onClick={() => onOpenChange(false)}>
+            <Link to={`/applicants/${handover.user_id}`} onClick={() => onOpenChange(false)}>
               <UserCircle className="mr-2 h-4 w-4" />
               View Full Profile
             </Link>
