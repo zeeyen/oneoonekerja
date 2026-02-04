@@ -1,6 +1,6 @@
 // Database types for 101Kerja
 
-export interface User {
+export interface Applicant {
   id: string;
   phone_number: string;
   ic_number: string | null;
@@ -26,6 +26,9 @@ export interface User {
   created_at: string;
   updated_at: string;
 }
+
+// Alias for backwards compatibility during migration
+export type User = Applicant;
 
 export interface Job {
   id: string;
@@ -108,8 +111,8 @@ export interface Handover {
   updated_at: string;
 }
 
-// Extended user type for handover details
-export interface HandoverUser {
+// Extended applicant type for handover details
+export interface HandoverApplicant {
   id: string;
   full_name: string | null;
   phone_number: string;
@@ -119,6 +122,9 @@ export interface HandoverUser {
   preferred_job_types?: string[];
   preferred_positions?: string[];
 }
+
+// Alias for backwards compatibility
+export type HandoverUser = HandoverApplicant;
 
 // Extended job type for handover details
 export interface HandoverJob {

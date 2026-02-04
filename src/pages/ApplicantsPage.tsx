@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useUsers, useTotalUsersCount, type UserFilter } from '@/hooks/useUsers';
-import { getOnboardingStatusConfig } from '@/lib/userStatusConfig';
+import { useApplicants, useTotalApplicantsCount, type ApplicantFilter } from '@/hooks/useApplicants';
+import { getOnboardingStatusConfig } from '@/lib/applicantStatusConfig';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorFallback } from '@/components/ErrorFallback';
 import { Card, CardContent } from '@/components/ui/card';
@@ -37,24 +37,24 @@ import { useDebounce } from '@/hooks/useDebounce';
 
 const PAGE_SIZE = 20;
 
-const filterOptions: { value: UserFilter; label: string }[] = [
-  { value: 'all', label: 'All Users' },
+const filterOptions: { value: ApplicantFilter; label: string }[] = [
+  { value: 'all', label: 'All Applicants' },
   { value: 'active', label: 'Active Only' },
   { value: 'completed', label: 'Completed Onboarding' },
   { value: 'in_progress', label: 'In Progress' },
   { value: 'new', label: 'New' },
 ];
 
-export default function UsersPage() {
+export default function ApplicantsPage() {
   const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState('');
-  const [filter, setFilter] = useState<UserFilter>('all');
+  const [filter, setFilter] = useState<ApplicantFilter>('all');
   const [page, setPage] = useState(1);
 
   const debouncedSearch = useDebounce(searchInput, 300);
 
-  const { data: totalCount } = useTotalUsersCount();
-  const { data, isLoading, isError, refetch } = useUsers({
+  const { data: totalCount } = useTotalApplicantsCount();
+  const { data, isLoading, isError, refetch } = useApplicants({
     search: debouncedSearch,
     filter,
     page,
@@ -135,9 +135,9 @@ export default function UsersPage() {
             <UsersIcon className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Users</h1>
+            <h1 className="text-2xl font-bold text-foreground">Applicants</h1>
             <p className="text-sm text-muted-foreground">
-              {totalCount !== undefined ? `${totalCount.toLocaleString()} total users` : 'Loading...'}
+              {totalCount !== undefined ? `${totalCount.toLocaleString()} total applicants` : 'Loading...'}
             </p>
           </div>
         </div>
@@ -156,9 +156,9 @@ export default function UsersPage() {
                 className="pl-9"
               />
             </div>
-            <Select value={filter} onValueChange={(value) => setFilter(value as UserFilter)}>
+            <Select value={filter} onValueChange={(value) => setFilter(value as ApplicantFilter)}>
               <SelectTrigger className="w-full sm:w-[200px]">
-                <SelectValue placeholder="Filter users" />
+                <SelectValue placeholder="Filter applicants" />
               </SelectTrigger>
               <SelectContent>
                 {filterOptions.map((option) => (
@@ -182,11 +182,11 @@ export default function UsersPage() {
             </div>
           ) : isError ? (
             <ErrorFallback
-              title="Failed to load users"
-              message="We couldn't load the user list. Please try again."
+              title="Failed to load applicants"
+              message="We couldn't load the applicant list. Please try again."
               onRetry={() => refetch()}
             />
-          ) : data && data.users.length > 0 ? (
+          ) : data && data.applicants.length > 0 ? (
             <>
               <div className="table-responsive">
                 <div className="rounded-md border min-w-[600px]">
@@ -201,22 +201,22 @@ export default function UsersPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {data.users.map((user) => {
-                        const statusConfig = getOnboardingStatusConfig(user.onboarding_status);
+                      {data.applicants.map((applicant) => {
+                        const statusConfig = getOnboardingStatusConfig(applicant.onboarding_status);
                         return (
                           <TableRow
-                            key={user.id}
+                            key={applicant.id}
                             className="cursor-pointer hover:bg-muted/50"
-                            onClick={() => navigate(`/users/${user.id}`)}
+                            onClick={() => navigate(`/applicants/${applicant.id}`)}
                           >
                             <TableCell className="font-medium">
-                              {user.full_name || 'Unknown'}
+                              {applicant.full_name || 'Unknown'}
                             </TableCell>
                             <TableCell className="font-mono text-sm">
-                              {user.phone_number}
+                              {applicant.phone_number}
                             </TableCell>
                             <TableCell>
-                              {formatLocation(user.location_city, user.location_state)}
+                              {formatLocation(applicant.location_city, applicant.location_state)}
                             </TableCell>
                             <TableCell>
                               <Badge className={statusConfig.className}>
@@ -224,7 +224,7 @@ export default function UsersPage() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-muted-foreground text-sm">
-                              {formatLastActive(user.last_active_at)}
+                              {formatLastActive(applicant.last_active_at)}
                             </TableCell>
                           </TableRow>
                         );
@@ -238,7 +238,7 @@ export default function UsersPage() {
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
                 <p className="text-sm text-muted-foreground">
                   Showing {((page - 1) * PAGE_SIZE) + 1} to{' '}
-                  {Math.min(page * PAGE_SIZE, data.totalCount)} of {data.totalCount} users
+                  {Math.min(page * PAGE_SIZE, data.totalCount)} of {data.totalCount} applicants
                 </p>
                 {renderPagination()}
               </div>
@@ -246,11 +246,11 @@ export default function UsersPage() {
           ) : (
             <EmptyState
               type="users"
-              title="No users found"
+              title="No applicants found"
               description={
                 searchInput || filter !== 'all'
                   ? 'Try adjusting your search or filter.'
-                  : 'Users will appear here once they register via WhatsApp.'
+                  : 'Applicants will appear here once they register via WhatsApp.'
               }
             />
           )}

@@ -11,8 +11,8 @@ import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
-import UsersPage from "./pages/UsersPage";
-import UserDetailPage from "./pages/UserDetailPage";
+import ApplicantsPage from "./pages/ApplicantsPage";
+import ApplicantDetailPage from "./pages/ApplicantDetailPage";
 import JobsPage from "./pages/JobsPage";
 import JobFormPage from "./pages/JobFormPage";
 import HandoversPage from "./pages/HandoversPage";
@@ -63,21 +63,21 @@ const App = () => (
                 }
               />
               <Route
-                path="/users"
+                path="/applicants"
                 element={
                   <ProtectedRoute>
                     <DashboardLayout>
-                      <UsersPage />
+                      <ApplicantsPage />
                     </DashboardLayout>
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="/users/:id"
+                path="/applicants/:id"
                 element={
                   <ProtectedRoute>
                     <DashboardLayout>
-                      <UserDetailPage />
+                      <ApplicantDetailPage />
                     </DashboardLayout>
                   </ProtectedRoute>
                 }

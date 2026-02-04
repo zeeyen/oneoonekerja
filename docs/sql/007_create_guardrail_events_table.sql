@@ -7,8 +7,8 @@
 CREATE TABLE public.guardrail_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   
-  -- User Reference
-  user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  -- Applicant Reference
+  user_id UUID REFERENCES public.applicants(id) ON DELETE SET NULL,
   
   -- Event Details
   event_type TEXT NOT NULL CHECK (event_type IN ('deviation', 'vulgar', 'spam')),
