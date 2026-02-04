@@ -272,6 +272,7 @@ export default function ApplicantDetailPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Job Title</TableHead>
+                        <TableHead>Company</TableHead>
                         <TableHead>Match Score</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Date</TableHead>
@@ -281,7 +282,10 @@ export default function ApplicantDetailPage() {
                       {jobMatches.map((match) => (
                         <TableRow key={match.id}>
                           <TableCell className="font-medium">
-                            {match.job?.job_title || 'Unknown Job'}
+                            {match.job?.title || 'Unknown Job'}
+                          </TableCell>
+                          <TableCell>
+                            {match.job?.company || '-'}
                           </TableCell>
                           <TableCell>
                             {match.match_score !== null ? (

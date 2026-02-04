@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import {
   useJobs,
   useActiveJobsCount,
-  useUpdateJobStatus,
+  useDeleteJob,
   MALAYSIAN_STATES,
+  INDUSTRY_OPTIONS,
   type JobStatusFilter,
-  type JobTypeFilter,
 } from '@/hooks/useJobs';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorFallback } from '@/components/ErrorFallback';
@@ -15,7 +15,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -39,30 +38,23 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
-import { Search, Briefcase, Plus } from 'lucide-react';
-import { format } from 'date-fns';
+import { Search, Briefcase, Plus, ExternalLink } from 'lucide-react';
+import { format, parseISO, isPast } from 'date-fns';
 import { useDebounce } from '@/hooks/useDebounce';
-import { toast } from '@/hooks/use-toast';
 
 const PAGE_SIZE = 20;
 
 const statusFilterOptions: { value: JobStatusFilter; label: string }[] = [
   { value: 'all', label: 'All Status' },
   { value: 'active', label: 'Active' },
-  { value: 'inactive', label: 'Inactive' },
-];
-
-const typeFilterOptions: { value: JobTypeFilter; label: string }[] = [
-  { value: 'all', label: 'All Types' },
-  { value: 'part_time', label: 'Part-time' },
-  { value: 'full_time', label: 'Full-time' },
+  { value: 'expired', label: 'Expired' },
 ];
 
 export default function JobsPage() {
   const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState('');
   const [statusFilter, setStatusFilter] = useState<JobStatusFilter>('all');
-  const [typeFilter, setTypeFilter] = useState<JobTypeFilter>('all');
+  const [industryFilter, setIndustryFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
 
@@ -72,59 +64,24 @@ export default function JobsPage() {
   const { data, isLoading, isError, refetch } = useJobs({
     search: debouncedSearch,
     statusFilter,
-    typeFilter,
+    industryFilter,
     stateFilter,
     page,
     pageSize: PAGE_SIZE,
   });
 
-  const updateStatusMutation = useUpdateJobStatus();
-
   // Reset to page 1 when filters change
   useMemo(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, typeFilter, stateFilter]);
+  }, [debouncedSearch, statusFilter, industryFilter, stateFilter]);
 
   const formatLocation = (city: string | null, state: string | null) => {
     if (city && state) return `${city}, ${state}`;
     return city || state || '-';
   };
 
-  const getJobTypeLabel = (jobType: number | null) => {
-    if (jobType === 1) return 'Part-time';
-    if (jobType === 2) return 'Full-time';
-    return '-';
-  };
-
-  const getJobTypeBadgeClass = (jobType: number | null) => {
-    if (jobType === 1) return 'bg-orange-100 text-orange-800 border-orange-200';
-    if (jobType === 2) return 'bg-blue-100 text-blue-800 border-blue-200';
-    return 'bg-gray-100 text-gray-800';
-  };
-
-  const handleStatusToggle = async (
-    e: React.MouseEvent,
-    jobId: string,
-    currentStatus: boolean
-  ) => {
-    e.stopPropagation(); // Prevent row click
-
-    try {
-      await updateStatusMutation.mutateAsync({
-        jobId,
-        isActive: !currentStatus,
-      });
-      toast({
-        title: 'Status updated',
-        description: `Job is now ${!currentStatus ? 'active' : 'inactive'}.`,
-      });
-    } catch (error) {
-      toast({
-        title: 'Update failed',
-        description: 'Failed to update job status. Please try again.',
-        variant: 'destructive',
-      });
-    }
+  const isJobActive = (expireBy: string) => {
+    return !isPast(parseISO(expireBy));
   };
 
   const renderPagination = () => {
@@ -207,7 +164,7 @@ export default function JobsPage() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by job title or position..."
+                placeholder="Search by title or company..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 className="pl-9"
@@ -233,16 +190,17 @@ export default function JobsPage() {
               </Select>
 
               <Select
-                value={typeFilter}
-                onValueChange={(value) => setTypeFilter(value as JobTypeFilter)}
+                value={industryFilter}
+                onValueChange={setIndustryFilter}
               >
                 <SelectTrigger className="w-full sm:w-[150px]">
-                  <SelectValue placeholder="Job Type" />
+                  <SelectValue placeholder="Industry" />
                 </SelectTrigger>
                 <SelectContent className="bg-background border shadow-lg z-50">
-                  {typeFilterOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
+                  <SelectItem value="all">All Industries</SelectItem>
+                  {INDUSTRY_OPTIONS.map((industry) => (
+                    <SelectItem key={industry} value={industry}>
+                      {industry}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -287,57 +245,71 @@ export default function JobsPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Job Title</TableHead>
-                        <TableHead>Position</TableHead>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Company</TableHead>
                         <TableHead>Location</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead className="text-center">Slots</TableHead>
+                        <TableHead>Industry</TableHead>
+                        <TableHead>Salary</TableHead>
                         <TableHead className="text-center">Status</TableHead>
-                        <TableHead>End Date</TableHead>
+                        <TableHead>Expires</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {data.jobs.map((job) => (
-                        <TableRow
-                          key={job.id}
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => navigate(`/jobs/${job.id}`)}
-                        >
-                          <TableCell className="font-medium">{job.job_title}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="capitalize">
-                              {job.position}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {formatLocation(job.location_city, job.location_state)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={getJobTypeBadgeClass(job.job_type)}>
-                              {getJobTypeLabel(job.job_type)}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-center font-mono">
-                            {job.slots_available}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <div
-                              className="flex justify-center"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Switch
-                                checked={job.is_active}
-                                onCheckedChange={() => {}}
-                                onClick={(e) => handleStatusToggle(e, job.id, job.is_active)}
-                                disabled={updateStatusMutation.isPending}
-                              />
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-sm">
-                            {job.end_date ? format(new Date(job.end_date), 'dd MMM yyyy') : '-'}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {data.jobs.map((job) => {
+                        const active = isJobActive(job.expire_by);
+                        return (
+                          <TableRow
+                            key={job.id}
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => navigate(`/jobs/${job.id}/edit`)}
+                          >
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                {job.title}
+                                {job.url && (
+                                  <a
+                                    href={job.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-muted-foreground hover:text-primary"
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>{job.company || '-'}</TableCell>
+                            <TableCell>
+                              {formatLocation(job.location_city, job.location_state)}
+                            </TableCell>
+                            <TableCell>
+                              {job.industry ? (
+                                <Badge variant="outline">{job.industry}</Badge>
+                              ) : (
+                                '-'
+                              )}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {job.salary_range || '-'}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge
+                                className={
+                                  active
+                                    ? 'bg-green-100 text-green-800 border-green-200'
+                                    : 'bg-gray-100 text-gray-800 border-gray-200'
+                                }
+                              >
+                                {active ? 'Active' : 'Expired'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {format(parseISO(job.expire_by), 'dd MMM yyyy')}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -357,12 +329,12 @@ export default function JobsPage() {
               type="jobs"
               title="No jobs yet"
               description={
-                searchInput || statusFilter !== 'all' || typeFilter !== 'all' || stateFilter !== 'all'
+                searchInput || statusFilter !== 'all' || industryFilter !== 'all' || stateFilter !== 'all'
                   ? 'Try adjusting your search or filters.'
                   : 'Create your first job listing to get started.'
               }
               action={
-                !searchInput && statusFilter === 'all' && typeFilter === 'all' && stateFilter === 'all'
+                !searchInput && statusFilter === 'all' && industryFilter === 'all' && stateFilter === 'all'
                   ? { label: 'Add Job', onClick: () => navigate('/jobs/new') }
                   : undefined
               }

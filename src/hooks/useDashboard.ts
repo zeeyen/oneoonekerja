@@ -12,12 +12,13 @@ async function fetchDashboardStats(): Promise<DashboardStats> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayISO = today.toISOString();
+  const todayDate = today.toISOString().split('T')[0];
 
   const [applicantsResult, activeTodayResult, completedResult, jobsResult] = await Promise.all([
     supabase.from('applicants').select('*', { count: 'exact', head: true }),
     supabase.from('applicants').select('*', { count: 'exact', head: true }).gte('last_active_at', todayISO),
     supabase.from('applicants').select('*', { count: 'exact', head: true }).eq('onboarding_status', 'completed'),
-    supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('is_active', true),
+    supabase.from('jobs').select('*', { count: 'exact', head: true }).gte('expire_by', todayDate),
   ]);
 
   return {

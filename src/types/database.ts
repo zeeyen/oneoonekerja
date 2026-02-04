@@ -32,29 +32,21 @@ export type User = Applicant;
 
 export interface Job {
   id: string;
-  external_job_id: number | null;
-  job_title: string;
-  position: string;
-  job_type: 1 | 2 | null; // 1 = part_time, 2 = full_time
-  branch_id: number | null;
-  branch_name: string | null;
-  location_city: string | null;
+  title: string;
+  company: string | null;
   location_state: string | null;
-  location_postcode: string | null;
+  location_city: string | null;
+  min_experience_years: number;
+  salary_range: string | null;
   gender_requirement: 'male' | 'female' | 'any';
-  age_min: number | null;
-  age_max: number | null;
-  is_oku_friendly: boolean;
-  num_shifts: number | null;
-  shift_details: Record<string, unknown>;
-  hourly_rate: number | null;
-  start_date: string | null;
-  end_date: string | null;
-  whatsapp_group_link: string | null;
-  is_active: boolean;
-  slots_available: number;
+  industry: string | null;
+  url: string | null;
   created_at: string;
-  updated_at: string;
+  expire_by: string; // date string
+  min_age: number | null;
+  max_age: number | null;
+  lat: number | null;
+  lng: number | null;
 }
 
 export interface Conversation {
