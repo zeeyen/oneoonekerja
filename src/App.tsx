@@ -15,7 +15,6 @@ import ApplicantsPage from "./pages/ApplicantsPage";
 import ApplicantDetailPage from "./pages/ApplicantDetailPage";
 import JobsPage from "./pages/JobsPage";
 import JobFormPage from "./pages/JobFormPage";
-import HandoversPage from "./pages/HandoversPage";
 import ConversationsPage from "./pages/ConversationsPage";
 import SettingsPage from "./pages/SettingsPage";
 import AccessDenied from "./pages/AccessDenied";
@@ -118,16 +117,6 @@ const App = () => (
                   <ProtectedRoute>
                     <DashboardLayout>
                       <JobFormPage mode="edit" />
-                    </DashboardLayout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/handovers"
-                element={
-                  <ProtectedRoute>
-                    <DashboardLayout>
-                      <HandoversPage />
                     </DashboardLayout>
                   </ProtectedRoute>
                 }

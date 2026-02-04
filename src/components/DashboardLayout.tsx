@@ -2,7 +2,6 @@ import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdmin } from '@/contexts/AdminContext';
-import { usePendingHandoversCount } from '@/hooks/usePendingHandoversCount';
 import {
   Sidebar,
   SidebarContent,
@@ -12,7 +11,6 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
@@ -32,7 +30,6 @@ import {
   LayoutDashboard,
   Users,
   Briefcase,
-  ArrowRightCircle,
   MessageSquare,
   Settings,
   LogOut,
@@ -46,7 +43,6 @@ function AppSidebar() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { isAdmin, role, fullName } = useAdmin();
-  const { count: pendingCount } = usePendingHandoversCount();
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
 
@@ -67,12 +63,6 @@ function AppSidebar() {
     { title: 'Dashboard', url: '/', icon: LayoutDashboard },
     { title: 'Applicants', url: '/applicants', icon: Users },
     { title: 'Jobs', url: '/jobs', icon: Briefcase },
-    { 
-      title: 'Handovers', 
-      url: '/handovers', 
-      icon: ArrowRightCircle,
-      badge: pendingCount > 0 ? pendingCount : undefined,
-    },
     { title: 'Conversations', url: '/conversations', icon: MessageSquare },
   ];
 
@@ -134,16 +124,6 @@ function AppSidebar() {
                       <span>{item.title}</span>
                     </Link>
                   </SidebarMenuButton>
-                  {item.badge !== undefined && (
-                    <SidebarMenuBadge>
-                      <Badge 
-                        variant="destructive" 
-                        className="h-5 min-w-5 px-1.5 text-xs font-medium"
-                      >
-                        {item.badge > 99 ? '99+' : item.badge}
-                      </Badge>
-                    </SidebarMenuBadge>
-                  )}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>

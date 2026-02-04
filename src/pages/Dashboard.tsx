@@ -1,41 +1,24 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useDashboardStats, useRecentHandovers, useDashboardRefresh } from '@/hooks/useDashboard';
-import { TokenVerificationModal } from '@/components/TokenVerificationModal';
-import { EmptyState } from '@/components/EmptyState';
-import { ErrorFallback } from '@/components/ErrorFallback';
-import { getStatusConfig } from '@/lib/statusConfig';
+import { useDashboardStats, useDashboardRefresh } from '@/hooks/useDashboard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Users,
   Briefcase,
   Clock,
   CheckCircle,
   RefreshCw,
-  Search,
   Plus,
 } from 'lucide-react';
-import { format } from 'date-fns';
 
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { data: stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useDashboardStats();
-  const { data: recentHandovers, isLoading: handoversLoading, isError: handoversError, refetch: refetchHandovers } = useRecentHandovers();
+  const { data: stats, isLoading: statsLoading } = useDashboardStats();
   const refreshDashboard = useDashboardRefresh();
-  const [tokenModalOpen, setTokenModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -62,12 +45,12 @@ export default function Dashboard() {
       bgColor: 'bg-emerald-50',
     },
     {
-      title: 'Pending Verification',
-      value: stats?.pendingVerification ?? 0,
+      title: 'Completed Onboarding',
+      value: stats?.completedOnboarding ?? 0,
       icon: CheckCircle,
-      description: 'Awaiting verification',
-      color: 'text-yellow-600',
-      bgColor: 'bg-yellow-50',
+      description: 'Fully onboarded applicants',
+      color: 'text-green-600',
+      bgColor: 'bg-green-50',
     },
     {
       title: 'Active Jobs',
@@ -133,108 +116,16 @@ export default function Dashboard() {
           <CardDescription>Common tasks you can perform quickly</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
-          <Button onClick={() => setTokenModalOpen(true)}>
-            <Search className="mr-2 h-4 w-4" />
-            Verify Token
-          </Button>
           <Button variant="outline" onClick={() => navigate('/jobs/new')}>
             <Plus className="mr-2 h-4 w-4" />
             Add Job
           </Button>
-        </CardContent>
-      </Card>
-
-      {/* Recent Handovers Table */}
-      <Card className="shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-lg">Recent Handovers</CardTitle>
-            <CardDescription>Latest candidates sent to recruiters</CardDescription>
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => navigate('/handovers')}>
-            View all
+          <Button variant="outline" onClick={() => navigate('/applicants')}>
+            <Users className="mr-2 h-4 w-4" />
+            View Applicants
           </Button>
-        </CardHeader>
-        <CardContent>
-          {handoversLoading ? (
-            <div className="space-y-3">
-              {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : handoversError ? (
-            <ErrorFallback
-              title="Failed to load handovers"
-              message="We couldn't load recent handovers."
-              onRetry={() => refetchHandovers()}
-            />
-          ) : recentHandovers && recentHandovers.length > 0 ? (
-            <div className="table-responsive">
-              <div className="rounded-md border min-w-[600px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Applicant Name</TableHead>
-                      <TableHead>Phone</TableHead>
-                      <TableHead>Job Title</TableHead>
-                      <TableHead>Token</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Created</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recentHandovers.map((handover) => {
-                      const statusConfig = getStatusConfig(handover.status);
-                      return (
-                        <TableRow
-                          key={handover.id}
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => navigate(`/handovers/${handover.id}`)}
-                        >
-                          <TableCell className="font-medium">
-                            {handover.user?.full_name || 'Unknown'}
-                          </TableCell>
-                          <TableCell className="font-mono text-sm">
-                            {handover.user?.phone_number || '-'}
-                          </TableCell>
-                          <TableCell>
-                            {handover.job?.job_title || 'Unknown Job'}
-                          </TableCell>
-                          <TableCell>
-                            <code className="bg-muted px-2 py-1 rounded text-xs font-mono">
-                              {handover.eligibility_token}
-                            </code>
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={statusConfig.className}>
-                              {statusConfig.label}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-sm">
-                            {format(new Date(handover.created_at), 'dd MMM yyyy')}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          ) : (
-            <EmptyState
-              type="handovers"
-              title="No handovers yet"
-              description="Handovers will appear here once candidates are sent to recruiters."
-            />
-          )}
         </CardContent>
       </Card>
-
-      {/* Token Verification Modal */}
-      <TokenVerificationModal
-        open={tokenModalOpen}
-        onOpenChange={setTokenModalOpen}
-      />
     </div>
   );
 }

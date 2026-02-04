@@ -2,11 +2,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   useApplicantDetail,
   useApplicantJobMatches,
-  useApplicantHandovers,
   useApplicantConversations,
 } from '@/hooks/useApplicantDetail';
 import { getOnboardingStatusConfig } from '@/lib/applicantStatusConfig';
-import { getStatusConfig } from '@/lib/statusConfig';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,7 +31,7 @@ import {
   CheckCircle,
   XCircle,
 } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 
 const languageLabels: Record<string, string> = {
   ms: 'Bahasa Malaysia',
@@ -52,7 +50,6 @@ export default function ApplicantDetailPage() {
 
   const { data: applicant, isLoading: applicantLoading } = useApplicantDetail(id!);
   const { data: jobMatches, isLoading: matchesLoading } = useApplicantJobMatches(id!);
-  const { data: handovers, isLoading: handoversLoading } = useApplicantHandovers(id!);
   const { data: conversations, isLoading: conversationsLoading } = useApplicantConversations(
     id!,
     applicant?.phone_number
@@ -256,7 +253,6 @@ export default function ApplicantDetailPage() {
       <Tabs defaultValue="matches" className="space-y-4">
         <TabsList>
           <TabsTrigger value="matches">Job Matches</TabsTrigger>
-          <TabsTrigger value="handovers">Handovers</TabsTrigger>
           <TabsTrigger value="conversations">Conversation History</TabsTrigger>
         </TabsList>
 
@@ -320,68 +316,6 @@ export default function ApplicantDetailPage() {
                 <div className="flex flex-col items-center justify-center py-12">
                   <Briefcase className="h-8 w-8 text-muted-foreground mb-2" />
                   <p className="text-muted-foreground">No job matches yet</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Handovers Tab */}
-        <TabsContent value="handovers">
-          <Card className="shadow-sm">
-            <CardContent className="pt-6">
-              {handoversLoading ? (
-                <div className="space-y-3">
-                  {[...Array(3)].map((_, i) => (
-                    <Skeleton key={i} className="h-12 w-full" />
-                  ))}
-                </div>
-              ) : handovers && handovers.length > 0 ? (
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Job Title</TableHead>
-                        <TableHead>Token</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Created</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {handovers.map((handover) => {
-                        const handoverStatusConfig = getStatusConfig(handover.status);
-                        return (
-                          <TableRow
-                            key={handover.id}
-                            className="cursor-pointer hover:bg-muted/50"
-                            onClick={() => navigate(`/handovers/${handover.id}`)}
-                          >
-                            <TableCell className="font-medium">
-                              {handover.job?.job_title || 'Unknown Job'}
-                            </TableCell>
-                            <TableCell>
-                              <code className="bg-muted px-2 py-1 rounded text-xs font-mono">
-                                {handover.eligibility_token}
-                              </code>
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={handoverStatusConfig.className}>
-                                {handoverStatusConfig.label}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-muted-foreground text-sm">
-                              {format(new Date(handover.created_at), 'dd MMM yyyy')}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <CheckCircle className="h-8 w-8 text-muted-foreground mb-2" />
-                  <p className="text-muted-foreground">No handovers yet</p>
                 </div>
               )}
             </CardContent>
