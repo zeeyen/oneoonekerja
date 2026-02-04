@@ -85,7 +85,6 @@ async function toggleAdminStatus(params: {
 interface SystemStats {
   totalApplicants: number;
   messagesThisMonth: number;
-  tokensThisMonth: number;
   activeJobs: number;
 }
 
@@ -100,15 +99,12 @@ async function fetchSystemStats(): Promise<SystemStats> {
     .from('applicants')
     .select('*', { count: 'exact', head: true });
 
-  // Fetch messages and tokens this month
-  const { data: messagesData } = await supabase
+  // Fetch messages count this month
+  const { count: messagesThisMonth } = await supabase
     .from('conversations')
-    .select('llm_tokens_used')
+    .select('*', { count: 'exact', head: true })
     .gte('created_at', monthStart)
     .lte('created_at', monthEnd);
-
-  const messagesThisMonth = messagesData?.length || 0;
-  const tokensThisMonth = messagesData?.reduce((sum, m) => sum + (m.llm_tokens_used || 0), 0) || 0;
 
   // Fetch active jobs count (expire_by >= today)
   const { count: activeJobs } = await supabase
@@ -118,8 +114,7 @@ async function fetchSystemStats(): Promise<SystemStats> {
 
   return {
     totalApplicants: totalApplicants || 0,
-    messagesThisMonth,
-    tokensThisMonth,
+    messagesThisMonth: messagesThisMonth || 0,
     activeJobs: activeJobs || 0,
   };
 }

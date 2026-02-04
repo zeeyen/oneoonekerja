@@ -36,7 +36,6 @@ import {
 import {
   Users,
   MessageSquare,
-  Zap,
   Briefcase,
   Download,
   Plus,
@@ -128,7 +127,7 @@ export default function SettingsPage() {
       {/* System Statistics */}
       <div>
         <h2 className="text-lg font-semibold mb-4">System Statistics</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -157,22 +156,6 @@ export default function SettingsPage() {
                 <Skeleton className="h-8 w-16" />
               ) : (
                 <div className="text-2xl font-bold">{stats?.messagesThisMonth.toLocaleString()}</div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Tokens This Month
-              </CardTitle>
-              <Zap className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {statsLoading ? (
-                <Skeleton className="h-8 w-16" />
-              ) : (
-                <div className="text-2xl font-bold">{stats?.tokensThisMonth.toLocaleString()}</div>
               )}
             </CardContent>
           </Card>
