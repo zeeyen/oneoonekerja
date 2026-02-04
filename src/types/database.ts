@@ -27,8 +27,8 @@ export interface Applicant {
   updated_at: string;
 }
 
-// Alias for backwards compatibility during migration
-export type User = Applicant;
+// Note: The database uses 'applicants' table (formerly 'users')
+// The user_id field in job_matches references applicants(id)
 
 export interface Job {
   id: string;

@@ -245,7 +245,7 @@ export default function ApplicantsPage() {
             </>
           ) : (
             <EmptyState
-              type="users"
+              type="applicants"
               title="No applicants found"
               description={
                 searchInput || filter !== 'all'
