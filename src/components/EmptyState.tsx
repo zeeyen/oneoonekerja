@@ -1,9 +1,9 @@
 import { ReactNode } from 'react';
-import { LucideIcon, Users, Briefcase, CheckCircle, FileSearch, MessageSquare, AlertCircle } from 'lucide-react';
+import { LucideIcon, Users, Briefcase, FileSearch, MessageSquare, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-type EmptyStateType = 'users' | 'jobs' | 'handovers' | 'conversations' | 'search' | 'error';
+type EmptyStateType = 'applicants' | 'jobs' | 'conversations' | 'search' | 'error';
 
 interface EmptyStateProps {
   type?: EmptyStateType;
@@ -19,18 +19,16 @@ interface EmptyStateProps {
 }
 
 const defaultIcons: Record<EmptyStateType, LucideIcon> = {
-  users: Users,
+  applicants: Users,
   jobs: Briefcase,
-  handovers: CheckCircle,
   conversations: MessageSquare,
   search: FileSearch,
   error: AlertCircle,
 };
 
 const defaultColors: Record<EmptyStateType, string> = {
-  users: 'text-primary',
+  applicants: 'text-primary',
   jobs: 'text-primary',
-  handovers: 'text-success',
   conversations: 'text-info',
   search: 'text-muted-foreground',
   error: 'text-destructive',
