@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApplicants, useTotalApplicantsCount, type ApplicantFilter } from '@/hooks/useApplicants';
-import { getOnboardingStatusConfig } from '@/lib/applicantStatusConfig';
+import { getApplicantStatusConfig, isApplicantBanned } from '@/lib/applicantStatusConfig';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorFallback } from '@/components/ErrorFallback';
+import { BanDetailsDialog } from '@/components/BanDetailsDialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +35,7 @@ import {
 import { Search, Users as UsersIcon } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useDebounce } from '@/hooks/useDebounce';
+import type { Applicant } from '@/types/database';
 
 const PAGE_SIZE = 20;
 
