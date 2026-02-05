@@ -63,11 +63,16 @@ export function AddAdminModal({ open, onOpenChange }: AddAdminModalProps) {
       // Get current session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
+      console.log('🔐 Session check:', { hasSession: !!session, sessionError: sessionError?.message });
+      
       if (sessionError || !session) {
         toast({ title: 'Error', description: 'You must be logged in to create admin users.', variant: 'destructive' });
         setIsSubmitting(false);
         return;
       }
+
+      console.log('📤 Sending request to Edge Function...');
+      console.log('🔑 Token prefix:', session.access_token.substring(0, 20) + '...');
 
       const response = await fetch(
         `https://gbvegikhzqxdxpldfdls.supabase.co/functions/v1/create-admin-user`,
@@ -86,21 +91,26 @@ export function AddAdminModal({ open, onOpenChange }: AddAdminModalProps) {
         }
       );
 
+      console.log('📥 Response status:', response.status, response.statusText);
+      
       const result = await response.json();
+      console.log('📥 Response body:', result);
 
-      if (result.success) {
+      if (response.ok && result.success) {
         toast({ title: 'Success', description: 'Admin user created successfully.' });
         queryClient.invalidateQueries({ queryKey: ['admin-users'] });
         onOpenChange(false);
         resetForm();
       } else {
+        console.error('❌ Error from Edge Function:', result);
         toast({
           title: 'Error',
-          description: result.error || 'Failed to create admin user.',
+          description: result.error || result.message || 'Failed to create admin user.',
           variant: 'destructive',
         });
       }
     } catch (error) {
+      console.error('❌ Network/fetch error:', error);
       toast({
         title: 'Error',
         description: 'Failed to create admin user. Please try again.',
