@@ -18,7 +18,6 @@ import {
 } from '@/components/ui/select';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 
@@ -35,7 +34,6 @@ export function AddAdminModal({ open, onOpenChange }: AddAdminModalProps) {
   const [role, setRole] = useState<'admin' | 'staff'>('staff');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { session } = useAuth();
   const queryClient = useQueryClient();
 
   const resetForm = () => {
