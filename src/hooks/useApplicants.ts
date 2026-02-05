@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { Applicant } from '@/types/database';
 
-export type ApplicantFilter = 'all' | 'active' | 'completed' | 'in_progress' | 'new';
+export type ApplicantFilter = 'all' | 'active' | 'completed' | 'in_progress' | 'new' | 'banned' | 'has_violations';
 
 interface UseApplicantsOptions {
   search: string;
