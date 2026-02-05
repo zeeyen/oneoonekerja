@@ -57,24 +57,20 @@ export function AddAdminModal({ open, onOpenChange }: AddAdminModalProps) {
       return;
     }
 
-    if (!password || password.length < 6) {
-      toast({ title: 'Validation Error', description: 'Password must be at least 6 characters.', variant: 'destructive' });
-      return;
-    }
-
-    if (!session?.access_token) {
-      toast({ title: 'Error', description: 'You must be logged in to perform this action.', variant: 'destructive' });
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
-      const { data: { publicUrl } } = supabase.storage.from('dummy').getPublicUrl('');
-      const supabaseUrl = publicUrl.split('/storage/')[0];
+      // Get current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        toast({ title: 'Error', description: 'You must be logged in to create admin users.', variant: 'destructive' });
+        setIsSubmitting(false);
+        return;
+      }
 
       const response = await fetch(
-        `${supabaseUrl}/functions/v1/create-admin-user`,
+        `https://gbvegikhzqxdxpldfdls.supabase.co/functions/v1/create-admin-user`,
         {
           method: 'POST',
           headers: {
