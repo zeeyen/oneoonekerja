@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApplicants, useTotalApplicantsCount, type ApplicantFilter } from '@/hooks/useApplicants';
-import { getOnboardingStatusConfig } from '@/lib/applicantStatusConfig';
+import { getApplicantStatusConfig, isApplicantBanned } from '@/lib/applicantStatusConfig';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorFallback } from '@/components/ErrorFallback';
+import { BanDetailsDialog } from '@/components/BanDetailsDialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +35,7 @@ import {
 import { Search, Users as UsersIcon } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useDebounce } from '@/hooks/useDebounce';
+import type { Applicant } from '@/types/database';
 
 const PAGE_SIZE = 20;
 
@@ -50,6 +52,7 @@ export default function ApplicantsPage() {
   const [searchInput, setSearchInput] = useState('');
   const [filter, setFilter] = useState<ApplicantFilter>('all');
   const [page, setPage] = useState(1);
+  const [banDialogApplicant, setBanDialogApplicant] = useState<Applicant | null>(null);
 
   const debouncedSearch = useDebounce(searchInput, 300);
 
@@ -202,12 +205,19 @@ export default function ApplicantsPage() {
                     </TableHeader>
                     <TableBody>
                       {data.applicants.map((applicant) => {
-                        const statusConfig = getOnboardingStatusConfig(applicant.onboarding_status);
+                        const statusConfig = getApplicantStatusConfig(applicant);
+                        const isBanned = isApplicantBanned(applicant);
                         return (
                           <TableRow
                             key={applicant.id}
                             className="cursor-pointer hover:bg-muted/50"
-                            onClick={() => navigate(`/applicants/${applicant.id}`)}
+                            onClick={() => {
+                              if (isBanned) {
+                                setBanDialogApplicant(applicant);
+                              } else {
+                                navigate(`/applicants/${applicant.id}`);
+                              }
+                            }}
                           >
                             <TableCell className="font-medium">
                               {applicant.full_name || 'Unknown'}
@@ -221,6 +231,9 @@ export default function ApplicantsPage() {
                             <TableCell>
                               <Badge className={statusConfig.className}>
                                 {statusConfig.label}
+                                {isBanned && applicant.violation_count > 0 && (
+                                  <span className="ml-1">({applicant.violation_count})</span>
+                                )}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-muted-foreground text-sm">
@@ -256,6 +269,12 @@ export default function ApplicantsPage() {
           )}
         </CardContent>
       </Card>
+
+      <BanDetailsDialog
+        applicant={banDialogApplicant}
+        open={banDialogApplicant !== null}
+        onOpenChange={(open) => !open && setBanDialogApplicant(null)}
+      />
     </div>
   );
 }

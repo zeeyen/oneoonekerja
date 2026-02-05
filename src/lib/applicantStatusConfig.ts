@@ -22,6 +22,23 @@ export const onboardingStatusConfig: Record<OnboardingStatus, StatusConfig> = {
   },
 };
 
+export const bannedStatusConfig: StatusConfig = {
+  label: 'Banned',
+  className: 'bg-red-100 text-red-800 hover:bg-red-100 border-red-200',
+};
+
+export function isApplicantBanned(applicant: Applicant): boolean {
+  if (!applicant.banned_until) return false;
+  return new Date(applicant.banned_until) > new Date();
+}
+
 export function getOnboardingStatusConfig(status: OnboardingStatus): StatusConfig {
   return onboardingStatusConfig[status] || onboardingStatusConfig.new;
+}
+
+export function getApplicantStatusConfig(applicant: Applicant): StatusConfig & { isBanned: boolean } {
+  if (isApplicantBanned(applicant)) {
+    return { ...bannedStatusConfig, isBanned: true };
+  }
+  return { ...getOnboardingStatusConfig(applicant.onboarding_status), isBanned: false };
 }
