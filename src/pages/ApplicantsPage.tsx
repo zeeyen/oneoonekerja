@@ -52,6 +52,7 @@ export default function ApplicantsPage() {
   const [searchInput, setSearchInput] = useState('');
   const [filter, setFilter] = useState<ApplicantFilter>('all');
   const [page, setPage] = useState(1);
+  const [banDialogApplicant, setBanDialogApplicant] = useState<Applicant | null>(null);
 
   const debouncedSearch = useDebounce(searchInput, 300);
 
