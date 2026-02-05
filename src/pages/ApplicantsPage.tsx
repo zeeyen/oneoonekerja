@@ -45,6 +45,8 @@ const filterOptions: { value: ApplicantFilter; label: string }[] = [
   { value: 'completed', label: 'Completed Onboarding' },
   { value: 'in_progress', label: 'In Progress' },
   { value: 'new', label: 'New' },
+  { value: 'banned', label: 'Banned' },
+  { value: 'has_violations', label: 'Has Violations' },
 ];
 
 export default function ApplicantsPage() {

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { Applicant } from '@/types/database';
 
-export type ApplicantFilter = 'all' | 'active' | 'completed' | 'in_progress' | 'new';
+export type ApplicantFilter = 'all' | 'active' | 'completed' | 'in_progress' | 'new' | 'banned' | 'has_violations';
 
 interface UseApplicantsOptions {
   search: string;
@@ -48,6 +48,14 @@ async function fetchApplicants({
       break;
     case 'new':
       query = query.eq('onboarding_status', 'new');
+      break;
+    case 'banned':
+      query = query
+        .not('banned_until', 'is', null)
+        .gt('banned_until', new Date().toISOString());
+      break;
+    case 'has_violations':
+      query = query.gt('violation_count', 0);
       break;
   }
 
