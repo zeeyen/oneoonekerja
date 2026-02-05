@@ -269,6 +269,12 @@ export default function ApplicantsPage() {
           )}
         </CardContent>
       </Card>
+
+      <BanDetailsDialog
+        applicant={banDialogApplicant}
+        open={banDialogApplicant !== null}
+        onOpenChange={(open) => !open && setBanDialogApplicant(null)}
+      />
     </div>
   );
 }

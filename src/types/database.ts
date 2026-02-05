@@ -25,6 +25,9 @@ export interface Applicant {
   last_active_at: string;
   created_at: string;
   updated_at: string;
+  violation_count: number;
+  banned_until: string | null;
+  ban_reason: string | null;
 }
 
 // Note: The database uses 'applicants' table (formerly 'users')
