@@ -205,12 +205,19 @@ export default function ApplicantsPage() {
                     </TableHeader>
                     <TableBody>
                       {data.applicants.map((applicant) => {
-                        const statusConfig = getOnboardingStatusConfig(applicant.onboarding_status);
+                        const statusConfig = getApplicantStatusConfig(applicant);
+                        const isBanned = isApplicantBanned(applicant);
                         return (
                           <TableRow
                             key={applicant.id}
                             className="cursor-pointer hover:bg-muted/50"
-                            onClick={() => navigate(`/applicants/${applicant.id}`)}
+                            onClick={() => {
+                              if (isBanned) {
+                                setBanDialogApplicant(applicant);
+                              } else {
+                                navigate(`/applicants/${applicant.id}`);
+                              }
+                            }}
                           >
                             <TableCell className="font-medium">
                               {applicant.full_name || 'Unknown'}
@@ -224,6 +231,9 @@ export default function ApplicantsPage() {
                             <TableCell>
                               <Badge className={statusConfig.className}>
                                 {statusConfig.label}
+                                {isBanned && applicant.violation_count > 0 && (
+                                  <span className="ml-1">({applicant.violation_count})</span>
+                                )}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-muted-foreground text-sm">
