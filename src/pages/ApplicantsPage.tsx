@@ -121,19 +121,17 @@ export default function ApplicantsPage() {
       const reason = applicant.ban_reason || 'No reason provided';
       
       return (
-        <TooltipProvider delayDuration={200}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge className="bg-destructive text-destructive-foreground cursor-help">
-                BANNED
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-[300px]">
-              <p className="text-xs font-medium">Banned until {banDate}</p>
-              <p className="text-xs text-muted-foreground mt-1">Reason: {reason}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge className="bg-destructive text-destructive-foreground cursor-help">
+              BANNED
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[300px]">
+            <p className="text-xs font-medium">Banned until {banDate}</p>
+            <p className="text-xs text-muted-foreground mt-1">Reason: {reason}</p>
+          </TooltipContent>
+        </Tooltip>
       );
     }
     
