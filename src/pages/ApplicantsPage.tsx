@@ -146,6 +146,8 @@ export default function ApplicantsPage() {
       </div>
     );
   };
+
+  const renderPagination = () => {
     if (!data || data.totalPages <= 1) return null;
 
     const pages = [];
