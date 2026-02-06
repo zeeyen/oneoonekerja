@@ -9,6 +9,7 @@ import {
 } from '@/hooks/useJobs';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorFallback } from '@/components/ErrorFallback';
+import { TooltipHeader } from '@/components/TooltipHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -239,10 +240,25 @@ export default function JobsPage() {
                       <TableRow>
                         <TableHead>Title</TableHead>
                         <TableHead>Company</TableHead>
-                        <TableHead>Location</TableHead>
+                        <TableHead>
+                          <TooltipHeader 
+                            label="Location" 
+                            tooltip="Job location used for distance-based matching with applicants" 
+                          />
+                        </TableHead>
                         <TableHead>Industry</TableHead>
-                        <TableHead>Salary</TableHead>
-                        <TableHead>Expires</TableHead>
+                        <TableHead>
+                          <TooltipHeader 
+                            label="Salary" 
+                            tooltip="Displayed to applicants during job matching" 
+                          />
+                        </TableHead>
+                        <TableHead>
+                          <TooltipHeader 
+                            label="Expires" 
+                            tooltip="Job automatically hidden from search results after this date" 
+                          />
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
