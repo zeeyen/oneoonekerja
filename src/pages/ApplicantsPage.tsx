@@ -36,7 +36,6 @@ import {
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Search, Users as UsersIcon, AlertTriangle } from 'lucide-react';
