@@ -4,7 +4,10 @@ import {
   useApplicantJobMatches,
   useApplicantConversations,
 } from '@/hooks/useApplicantDetail';
+import { useAdminActions } from '@/hooks/useModeration';
 import { getOnboardingStatusConfig } from '@/lib/applicantStatusConfig';
+import { ModerationSection } from '@/components/ModerationSection';
+import { ModerationHistory } from '@/components/ModerationHistory';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -54,6 +57,7 @@ export default function ApplicantDetailPage() {
     id!,
     applicant?.phone_number
   );
+  const { data: adminActions = [], isLoading: actionsLoading } = useAdminActions(id!);
 
   if (applicantLoading) {
     return (
@@ -248,6 +252,10 @@ export default function ApplicantDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Moderation */}
+      <ModerationSection applicant={applicant} />
+      <ModerationHistory actions={adminActions} isLoading={actionsLoading} />
 
       {/* Tabs */}
       <Tabs defaultValue="matches" className="space-y-4">
