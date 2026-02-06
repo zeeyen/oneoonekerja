@@ -99,3 +99,16 @@ export interface GuardrailEvent {
   action_taken: 'warning' | 'timeout' | 'none' | null;
   created_at: string;
 }
+
+export interface AdminAction {
+  id: string;
+  admin_id: string | null;
+  action_type: 'ban' | 'unban' | 'extend_ban';
+  target_user_id: string;
+  details: {
+    reason?: string;
+    duration?: string;
+    previous_ban_until?: string | null;
+  };
+  created_at: string;
+}
