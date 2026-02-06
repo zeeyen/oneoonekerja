@@ -9,6 +9,7 @@ import {
 } from '@/hooks/useJobs';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorFallback } from '@/components/ErrorFallback';
+import { TooltipHeader } from '@/components/TooltipHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
