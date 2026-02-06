@@ -91,7 +91,61 @@ export default function ApplicantsPage() {
     }
   };
 
-  const renderPagination = () => {
+  const getViolationBadge = (count: number) => {
+    if (count === 0) return null;
+    
+    const isHighRisk = count >= 3;
+    return (
+      <Badge 
+        variant="outline" 
+        className={`ml-2 text-xs ${
+          isHighRisk 
+            ? 'border-destructive text-destructive bg-destructive/10' 
+            : 'border-amber-500 text-amber-600 bg-amber-50'
+        }`}
+      >
+        <AlertTriangle className="h-3 w-3 mr-1" />
+        {count} violation{count > 1 ? 's' : ''}
+      </Badge>
+    );
+  };
+
+  const renderStatusCell = (applicant: Applicant) => {
+    const statusConfig = getApplicantStatusConfig(applicant);
+    const isBanned = isApplicantBanned(applicant);
+    
+    if (isBanned) {
+      const banDate = applicant.banned_until 
+        ? format(new Date(applicant.banned_until), 'dd MMM yyyy, HH:mm')
+        : 'Unknown';
+      const reason = applicant.ban_reason || 'No reason provided';
+      
+      return (
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge className="bg-destructive text-destructive-foreground cursor-help">
+                BANNED
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[300px]">
+              <p className="text-xs font-medium">Banned until {banDate}</p>
+              <p className="text-xs text-muted-foreground mt-1">Reason: {reason}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+    
+    return (
+      <div className="flex items-center">
+        <Badge className={statusConfig.className}>
+          {statusConfig.label}
+        </Badge>
+        {getViolationBadge(applicant.violation_count)}
+      </div>
+    );
+  };
     if (!data || data.totalPages <= 1) return null;
 
     const pages = [];
