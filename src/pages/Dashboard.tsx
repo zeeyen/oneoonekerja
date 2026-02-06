@@ -79,6 +79,7 @@ export default function Dashboard() {
       description: 'Registered job seekers',
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
+      tooltip: 'All users who have messaged the WhatsApp bot',
     },
     {
       title: 'Active Today',
@@ -87,6 +88,7 @@ export default function Dashboard() {
       description: 'Applicants active today',
       color: 'text-emerald-600',
       bgColor: 'bg-emerald-50',
+      tooltip: 'Users who sent at least one message in the last 24 hours',
     },
     {
       title: 'Active Jobs',
@@ -95,6 +97,7 @@ export default function Dashboard() {
       description: 'Open positions',
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
+      tooltip: 'Job listings with valid expiration dates',
     },
   ];
 
