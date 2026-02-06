@@ -285,7 +285,6 @@ export default function ApplicantsPage() {
                     </TableHeader>
                     <TableBody>
                       {data.applicants.map((applicant) => {
-                        const statusConfig = getApplicantStatusConfig(applicant);
                         const isBanned = isApplicantBanned(applicant);
                         return (
                           <TableRow
@@ -309,12 +308,7 @@ export default function ApplicantsPage() {
                               {formatLocation(applicant.location_city, applicant.location_state)}
                             </TableCell>
                             <TableCell>
-                              <Badge className={statusConfig.className}>
-                                {statusConfig.label}
-                                {isBanned && applicant.violation_count > 0 && (
-                                  <span className="ml-1">({applicant.violation_count})</span>
-                                )}
-                              </Badge>
+                              {renderStatusCell(applicant)}
                             </TableCell>
                             <TableCell className="text-muted-foreground text-sm">
                               {formatLastActive(applicant.last_active_at)}
