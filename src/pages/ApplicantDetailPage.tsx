@@ -4,7 +4,10 @@ import {
   useApplicantJobMatches,
   useApplicantConversations,
 } from '@/hooks/useApplicantDetail';
+import { useAdminActions } from '@/hooks/useModeration';
 import { getOnboardingStatusConfig } from '@/lib/applicantStatusConfig';
+import { ModerationSection } from '@/components/ModerationSection';
+import { ModerationHistory } from '@/components/ModerationHistory';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
