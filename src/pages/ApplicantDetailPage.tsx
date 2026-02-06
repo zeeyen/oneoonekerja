@@ -57,6 +57,7 @@ export default function ApplicantDetailPage() {
     id!,
     applicant?.phone_number
   );
+  const { data: adminActions = [], isLoading: actionsLoading } = useAdminActions(id!);
 
   if (applicantLoading) {
     return (
