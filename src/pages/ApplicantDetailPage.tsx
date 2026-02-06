@@ -253,8 +253,11 @@ export default function ApplicantDetailPage() {
         </CardContent>
       </Card>
 
+      {/* Moderation */}
+      <ModerationSection applicant={applicant} />
+      <ModerationHistory actions={adminActions} isLoading={actionsLoading} />
+
       {/* Tabs */}
-      <Tabs defaultValue="matches" className="space-y-4">
         <TabsList>
           <TabsTrigger value="matches">Job Matches</TabsTrigger>
           <TabsTrigger value="conversations">Conversation History</TabsTrigger>
