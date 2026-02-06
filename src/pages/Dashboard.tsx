@@ -179,8 +179,18 @@ export default function Dashboard() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Phone</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>
+                    <TooltipHeader 
+                      label="Location" 
+                      tooltip="Extracted from user's chat message" 
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <TooltipHeader 
+                      label="Status" 
+                      tooltip="Bot flow status: new → in_progress → matching → completed" 
+                    />
+                  </TableHead>
                   <TableHead>Registered</TableHead>
                 </TableRow>
               </TableHeader>
