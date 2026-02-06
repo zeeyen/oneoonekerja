@@ -5,6 +5,7 @@ import { getApplicantStatusConfig, isApplicantBanned } from '@/lib/applicantStat
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorFallback } from '@/components/ErrorFallback';
 import { BanDetailsDialog } from '@/components/BanDetailsDialog';
+import { TooltipHeader } from '@/components/TooltipHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -200,9 +201,24 @@ export default function ApplicantsPage() {
                       <TableRow>
                         <TableHead>Name</TableHead>
                         <TableHead>Phone</TableHead>
-                        <TableHead>Location</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Last Active</TableHead>
+                        <TableHead>
+                          <TooltipHeader 
+                            label="Location" 
+                            tooltip="City and state extracted from user's WhatsApp message, used for job proximity matching" 
+                          />
+                        </TableHead>
+                        <TableHead>
+                          <TooltipHeader 
+                            label="Status" 
+                            tooltip="Current state in bot flow: 'new' = just started, 'in_progress' = collecting info, 'matching' = viewing jobs, 'completed' = selected a job" 
+                          />
+                        </TableHead>
+                        <TableHead>
+                          <TooltipHeader 
+                            label="Last Active" 
+                            tooltip="Timestamp of user's most recent WhatsApp message to Kak Ani" 
+                          />
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
