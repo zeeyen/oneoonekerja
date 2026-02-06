@@ -33,8 +33,14 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
-import { Search, Users as UsersIcon } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { Search, Users as UsersIcon, AlertTriangle } from 'lucide-react';
+import { formatDistanceToNow, format } from 'date-fns';
 import { useDebounce } from '@/hooks/useDebounce';
 import type { Applicant } from '@/types/database';
 
