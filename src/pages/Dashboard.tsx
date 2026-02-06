@@ -15,10 +15,18 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { TooltipHeader } from '@/components/TooltipHeader';
+import {
   Users,
   Briefcase,
   Activity,
   RefreshCw,
+  Info,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
