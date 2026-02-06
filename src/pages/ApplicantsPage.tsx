@@ -5,6 +5,7 @@ import { getApplicantStatusConfig, isApplicantBanned } from '@/lib/applicantStat
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorFallback } from '@/components/ErrorFallback';
 import { BanDetailsDialog } from '@/components/BanDetailsDialog';
+import { TooltipHeader } from '@/components/TooltipHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
