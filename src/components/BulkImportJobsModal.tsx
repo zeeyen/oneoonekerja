@@ -191,24 +191,24 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
                     >
                       <TableCell className="text-muted-foreground">{row.rowNumber}</TableCell>
                       <TableCell className="font-medium max-w-[200px] truncate">
-                        {row.raw.title || <span className="text-muted-foreground italic">empty</span>}
+                        {row.raw.job_title || <span className="text-muted-foreground italic">empty</span>}
                       </TableCell>
-                      <TableCell className="max-w-[150px] truncate">{row.raw.company || '-'}</TableCell>
+                      <TableCell className="max-w-[150px] truncate">{row.raw.company_name || '-'}</TableCell>
                       <TableCell className="text-sm">
-                        {row.raw.location_city || row.raw.location_state
-                          ? `${row.raw.location_city}${row.raw.location_city && row.raw.location_state ? ', ' : ''}${row.raw.location_state}`
+                        {row.raw.city || row.raw.state
+                          ? `${row.raw.city}${row.raw.city && row.raw.state ? ', ' : ''}${row.raw.state}`
                           : '-'}
                       </TableCell>
                       <TableCell>
                         {row.locationResolved ? (
                           <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        ) : row.raw.location_city ? (
+                        ) : row.raw.city ? (
                           <AlertTriangle className="h-4 w-4 text-yellow-500" />
                         ) : (
                           <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-sm">{row.raw.expire_by || '-'}</TableCell>
+                      <TableCell className="text-sm">{row.raw.end_date || '-'}</TableCell>
                       <TableCell>
                         {row.errors.length > 0 ? (
                           <div className="flex items-center gap-1 text-destructive text-xs">
