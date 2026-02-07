@@ -87,7 +87,8 @@ export default function ApplicantDetailPage() {
 
   const statusConfig = getOnboardingStatusConfig(applicant.onboarding_status);
 
-  const formatAvailability = (availability: Record<string, boolean>) => {
+  const formatAvailability = (availability: Record<string, boolean> | null) => {
+    if (!availability) return ['Not specified'];
     const slots = Object.entries(availability)
       .filter(([, available]) => available)
       .map(([slot]) => slot.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()));
@@ -196,7 +197,7 @@ export default function ApplicantDetailPage() {
                   <Briefcase className="h-4 w-4" />
                   Years Experience
                 </label>
-                <p className="mt-1">{applicant.years_experience} years</p>
+                <p className="mt-1">{applicant.years_experience ?? 0} years</p>
               </div>
             </div>
           </div>
@@ -212,8 +213,8 @@ export default function ApplicantDetailPage() {
           <div>
             <label className="text-sm font-medium text-muted-foreground">Job Types</label>
             <div className="flex flex-wrap gap-2 mt-2">
-              {applicant.preferred_job_types.length > 0 ? (
-                applicant.preferred_job_types.map((type) => (
+              {(applicant.preferred_job_types ?? []).length > 0 ? (
+                (applicant.preferred_job_types ?? []).map((type) => (
                   <Badge key={type} variant="secondary">
                     {jobTypeLabels[type] || type}
                   </Badge>
@@ -226,8 +227,8 @@ export default function ApplicantDetailPage() {
           <div>
             <label className="text-sm font-medium text-muted-foreground">Preferred Positions</label>
             <div className="flex flex-wrap gap-2 mt-2">
-              {applicant.preferred_positions.length > 0 ? (
-                applicant.preferred_positions.map((position) => (
+              {(applicant.preferred_positions ?? []).length > 0 ? (
+                (applicant.preferred_positions ?? []).map((position) => (
                   <Badge key={position} variant="outline" className="capitalize">
                     {position}
                   </Badge>
