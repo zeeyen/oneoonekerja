@@ -1,92 +1,57 @@
 
 
-## AI-Powered Geocoding Fallback via Lovable AI Gateway
+## Backfill Geocoding for Existing Jobs with Missing Coordinates
 
-### Overview
-When the local `malaysia_locations` lookup fails to resolve lat/lng for a job, use the Lovable AI Gateway as a final fallback. An edge function will send the location fields (city, state, location_address, postcode, country) to the AI model and ask it to return coordinates.
+### Problem
+There are ~20+ jobs already in the database with null `latitude`/`longitude` despite having usable location data (`location_address`, `postcode`, `location_city`, `location_state`). The AI geocoding fallback only runs during CSV import -- it does not retroactively fix existing records.
 
-### Architecture
+### Solution
+Add a "Backfill Coordinates" button on the Jobs page that:
+1. Queries all jobs where `latitude IS NULL` and at least one location field is populated
+2. Calls the existing `geocode-location` edge function for each job (throttled, 200ms delay)
+3. Updates each job's `latitude`/`longitude` in the database
+4. Shows progress and results
 
-```text
-CSV Import (browser)
-  |
-  v
-Local lookup (malaysia_locations table)
-  |
-  +--> Resolved? Done.
-  |
-  +--> Not resolved? Call edge function
-         |
-         v
-       Edge Function: geocode-location
-         |
-         v
-       Lovable AI Gateway (google/gemini-3-flash-preview)
-         |
-         v
-       Returns { latitude, longitude } or null
+### Files to Change
+
+**`src/pages/JobsPage.tsx`**:
+- Add a "Backfill Coordinates" button (visible to admins) near the existing action buttons
+- Wire it to a new hook
+
+**`src/hooks/useBackfillGeocode.ts`** (new file):
+- Query jobs where `latitude IS NULL AND (location_address IS NOT NULL OR location_city IS NOT NULL OR postcode IS NOT NULL)`
+- For each job, call `supabase.functions.invoke('geocode-location', { body: { city, state, location_address, postcode, country } })`
+- On success, update the job record with the returned lat/lng
+- Throttle calls with 200ms delay to avoid rate limits
+- Track progress (current/total) and results (resolved count, failed count)
+- Handle 429/402 errors gracefully by stopping early
+
+### UI Behavior
+- Button shows "Backfill Coordinates (N unresolved)" with count of jobs needing resolution
+- While running: progress bar or text "Resolving... 5/20"
+- On completion: toast with "Resolved 18/20 jobs. 2 could not be resolved."
+- Button is disabled while backfill is in progress
+
+### Technical Details
+
+Query for unresolved jobs:
+```sql
+SELECT id, location_city, location_state, location_address, postcode, country
+FROM jobs
+WHERE latitude IS NULL
+  AND (location_address IS NOT NULL OR location_city IS NOT NULL OR postcode IS NOT NULL)
 ```
 
-### Edge Function: `supabase/functions/geocode-location/index.ts`
-
-- Accepts POST with `{ city, state, location_address, postcode, country }`
-- Calls Lovable AI Gateway at `https://ai.gateway.lovable.dev/v1/chat/completions`
-- Uses tool calling to extract structured `{ latitude, longitude }` output
-- Model: `google/gemini-3-flash-preview` (fast, cheap)
-- Returns JSON `{ latitude: number, longitude: number }` or `{ latitude: null, longitude: null }` if unresolvable
-- Handles 429/402 errors gracefully
-
-Prompt strategy:
-```
-You are a geocoding assistant. Given location details in Malaysia, 
-return the latitude and longitude of the most likely location.
-```
-
-With tool definition:
-```json
-{
-  "name": "return_coordinates",
-  "parameters": {
-    "properties": {
-      "latitude": { "type": "number" },
-      "longitude": { "type": "number" }
-    }
-  }
+For each result, call the edge function and update:
+```typescript
+const { data } = await supabase.functions.invoke('geocode-location', {
+  body: { city: job.location_city, state: job.location_state, 
+          location_address: job.location_address, postcode: job.postcode, 
+          country: job.country || 'Malaysia' }
+});
+if (data?.latitude && data?.longitude) {
+  await supabase.from('jobs').update({ latitude: data.latitude, longitude: data.longitude }).eq('id', job.id);
 }
 ```
 
-### Changes to `src/hooks/useBulkImportJobs.ts`
-
-- After `resolveLocation` returns null, collect unresolved rows
-- Batch-call the edge function for unresolved rows (one call per row, throttled to avoid rate limits)
-- Update the row's `latitude`/`longitude` with AI results before insert
-- Add a small delay between calls (e.g., 200ms) to respect rate limits
-
-### Changes to `src/components/BulkImportJobsModal.tsx`
-
-- Add a new status indicator: "AI-resolved" (distinct from locally resolved)
-- Show progress during AI resolution phase ("Resolving locations... X/Y")
-- Add a secondary step between parsing and importing: location resolution
-
-### Flow Update
-
-Current flow: Upload CSV -> Parse -> Preview -> Import
-
-New flow: Upload CSV -> Parse -> Preview -> **Resolve locations (AI fallback)** -> Updated Preview -> Import
-
-The AI resolution step runs automatically after parsing. Rows that were unresolved locally get sent to the edge function. The preview table updates with resolved coordinates.
-
-### Cost and Rate Limit Considerations
-
-- Each unresolved row = 1 AI call (very small prompt, minimal tokens)
-- `google/gemini-3-flash-preview` is the cheapest/fastest option
-- Batch imports with many unresolved rows could hit rate limits; add 200ms delay between calls
-- Surface 429/402 errors as warnings (skip AI resolution for remaining rows, proceed with import)
-
-### Files to Create/Change
-
-1. **Create** `supabase/functions/geocode-location/index.ts` -- edge function
-2. **Update** `supabase/config.toml` -- register the function
-3. **Update** `src/hooks/useBulkImportJobs.ts` -- add AI fallback after local resolution
-4. **Update** `src/components/BulkImportJobsModal.tsx` -- show AI resolution progress and status
-
+No new edge functions or migrations needed -- this reuses the existing `geocode-location` function.
