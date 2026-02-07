@@ -1,54 +1,67 @@
 
 
-## Adapt Bulk Import to Match Real CSV Format
+## Add New Columns to Jobs Table and Enhance Location Resolution
 
-### Problem
-The current bulk import expects a custom template with specific column names (`title`, `company`, `expire_by`, etc.), but the actual export file uses different column names (`job_title`, `company_name`, `end_date`, etc.) and different data formats (dates as DD/MM/YYYY, gender as "Both" instead of "any", and literal "NULL" strings).
+### Overview
+Add four new columns (`external_job_id`, `location_address`, `postcode`, `country`) to the `jobs` table, and enhance the bulk import geocoding logic to use the `location` and `postcode` fields as additional inputs when resolving latitude/longitude.
 
-### Column Mapping
+### Database Migration
 
-| Source CSV Column  | Maps To (DB)         | Transform Needed                     |
-|--------------------|----------------------|--------------------------------------|
-| `job_title`        | `title`              | Direct                               |
-| `company_name`     | `company`            | Direct                               |
-| `city`             | `location_city`      | Strip "NULL" strings                 |
-| `state`            | `location_state`     | Strip "NULL" strings                 |
-| `salary_range`     | `salary_range`       | Direct (keep as-is, e.g. "RM 102/day") |
-| `gender_requirement` | `gender_requirement` | "Both" to "any", lowercase           |
-| `url`              | `url`                | Direct                               |
-| `end_date`         | `expire_by`          | Convert DD/MM/YYYY to YYYY-MM-DD     |
-| `age_min`          | `min_age`            | Direct number                        |
-| `age_max`          | `max_age`            | Direct number                        |
-| (not present)      | `industry`           | Default to null                      |
-| (not present)      | `min_experience_years` | Default to 0                       |
-| `id`, `job_id`, `location`, `postcode`, `country`, `created_at` | (ignored) | Skipped during import |
+Add four columns to the `jobs` table:
 
-### Changes
+```sql
+ALTER TABLE public.jobs
+  ADD COLUMN IF NOT EXISTS external_job_id TEXT,
+  ADD COLUMN IF NOT EXISTS location_address TEXT,
+  ADD COLUMN IF NOT EXISTS postcode TEXT,
+  ADD COLUMN IF NOT EXISTS country TEXT DEFAULT 'Malaysia';
+```
 
-**File: `src/hooks/useBulkImportJobs.ts`**
+- `external_job_id` -- stores the source system's job ID (e.g. "JOB003")
+- `location_address` -- stores the full location string from the CSV (e.g. "PORT KLANG, ")
+- `postcode` -- five-digit postal code
+- `country` -- defaults to "Malaysia"
 
-1. Update `CSV_HEADERS` to match the source file columns: `id, job_id, job_title, company_name, location, postcode, city, state, country, salary_range, gender_requirement, url, created_at, end_date, age_min, age_max`
-2. Update `CsvRow` interface to match these source column names
-3. Add a transform step that maps source columns to DB fields:
-   - `job_title` to `title`
-   - `company_name` to `company`
-   - `city` to `location_city` (treat "NULL" as empty)
-   - `state` to `location_state` (treat "NULL" as empty)
-   - `end_date` DD/MM/YYYY to `expire_by` YYYY-MM-DD
-   - `gender_requirement` "Both" to "any"
-   - `age_min`/`age_max` renamed to `min_age`/`max_age`
-4. Update `validateRow` to work with the new field names
-5. Update `generateCsvTemplate()` to output the correct source headers
-6. Update date validation to accept DD/MM/YYYY format (converting internally)
+### Enhanced Location Resolution
 
-**File: `src/components/BulkImportJobsModal.tsx`**
+Currently, lat/lng is resolved by matching `city` against `malaysia_locations.name`. The enhancement adds two fallback strategies:
 
-7. No structural changes needed -- the preview table already reads from `raw.title`, `raw.company`, etc. These references will be updated to match the new `CsvRow` field names (`raw.job_title`, `raw.company_name`, `raw.city`, `raw.state`, `raw.end_date`)
+1. **Primary match** (existing): Match `city` against `malaysia_locations.name` within the same `state` (case-insensitive)
+2. **Fallback 1 -- location field**: If city match fails, try matching the `location` field (cleaned, trimmed) against `malaysia_locations.name`
+3. **Fallback 2 -- aliases**: Try matching `city` or `location` against `malaysia_locations.aliases` array
 
-### Data Handling Details
+This cascading approach maximizes the geocoding hit rate.
 
-- **"NULL" strings**: The source CSV uses literal `NULL` text for missing values. The parser will treat any value that is exactly "NULL" (case-insensitive) as empty.
-- **Date conversion**: `DD/MM/YYYY` will be parsed and converted to `YYYY-MM-DD` for the database. Invalid dates will show a validation error.
-- **Gender mapping**: "Both" maps to "any", "Male" to "male", "Female" to "female".
-- **Template download**: Will generate headers matching the source CSV format so users can fill in new data using the same structure.
+### Files to Change
+
+**Database migration** (1 migration):
+- Add `external_job_id`, `location_address`, `postcode`, `country` columns to `jobs` table
+
+**`src/types/database.ts`**:
+- Add `external_job_id`, `location_address`, `postcode`, `country` fields to the `Job` interface
+
+**`src/hooks/useBulkImportJobs.ts`**:
+- Update `MalaysiaLocation` interface to include `aliases`
+- Fetch `aliases` column alongside existing location data
+- Update `resolveLocation` function to accept `location` as additional input and try alias matching
+- Map `job_id` to `external_job_id`, `location` to `location_address`, `postcode` and `country` in the insert records
+
+**`src/hooks/useBulkImportJobs.ts` -- resolveLocation enhanced logic**:
+```
+1. Try city vs malaysia_locations.name (within state) -- existing
+2. Try location field vs malaysia_locations.name (within state)
+3. Try city or location vs malaysia_locations.aliases
+4. If all fail, return null (lat/lng will be empty)
+```
+
+**`src/components/JobEditForm.tsx`**:
+- Add `postcode` and `location_address` input fields to the edit form
+- Add these to the `JobEditFormData` interface
+
+**`src/pages/JobDetailPage.tsx`**:
+- Display `postcode`, `location_address`, and `external_job_id` in the job detail view
+- Include `postcode` and `location_address` in the save/update payload
+
+**`src/hooks/useJobForm.ts`**:
+- Add `postcode`, `location_address`, `country` to `JobFormData` interface and defaults
 
