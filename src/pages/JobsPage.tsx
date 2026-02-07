@@ -10,7 +10,9 @@ import {
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorFallback } from '@/components/ErrorFallback';
 import { TooltipHeader } from '@/components/TooltipHeader';
+import { BulkImportJobsModal } from '@/components/BulkImportJobsModal';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -37,7 +39,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
-import { Search, Briefcase, ExternalLink } from 'lucide-react';
+import { Search, Briefcase, ExternalLink, Upload } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 import { useDebounce } from '@/hooks/useDebounce';
 
@@ -56,6 +58,7 @@ export default function JobsPage() {
   const [industryFilter, setIndustryFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
 
   const debouncedSearch = useDebounce(searchInput, 300);
 
@@ -134,20 +137,28 @@ export default function JobsPage() {
 
   return (
     <div className="animate-fade-in space-y-6">
-      {/* Page header - no Add Job button */}
-      <div className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-          <Briefcase className="h-5 w-5 text-primary" />
+      {/* Page header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Briefcase className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Jobs</h1>
+            <p className="text-sm text-muted-foreground">
+              {activeCount !== undefined
+                ? `${activeCount.toLocaleString()} active jobs`
+                : 'Loading...'}
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Jobs</h1>
-          <p className="text-sm text-muted-foreground">
-            {activeCount !== undefined
-              ? `${activeCount.toLocaleString()} active jobs`
-              : 'Loading...'}
-          </p>
-        </div>
+        <Button variant="outline" onClick={() => setBulkImportOpen(true)}>
+          <Upload className="h-4 w-4 mr-2" />
+          Bulk Import
+        </Button>
       </div>
+
+      <BulkImportJobsModal open={bulkImportOpen} onOpenChange={setBulkImportOpen} />
 
       {/* Search and Filters */}
       <Card className="shadow-sm">
