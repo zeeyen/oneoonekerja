@@ -52,6 +52,10 @@ export interface Job {
   lng: number | null;
   last_edited_by: string | null;
   last_edited_at: string | null;
+  external_job_id: string | null;
+  location_address: string | null;
+  postcode: string | null;
+  country: string | null;
 }
 
 export interface Conversation {

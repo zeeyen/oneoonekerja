@@ -65,6 +65,9 @@ export default function JobFormPage({ mode }: JobFormPageProps) {
         expire_by: existingJob.expire_by,
         min_age: existingJob.min_age,
         max_age: existingJob.max_age,
+        postcode: existingJob.postcode || '',
+        location_address: existingJob.location_address || '',
+        country: existingJob.country || 'Malaysia',
       });
       if (existingJob.expire_by) setExpireDate(parseISO(existingJob.expire_by));
     }
@@ -258,6 +261,24 @@ export default function JobFormPage({ mode }: JobFormPageProps) {
                   onChange={(e) => handleInputChange('location_city', e.target.value)}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="postcode">Postcode</Label>
+                <Input
+                  id="postcode"
+                  placeholder="e.g., 40000"
+                  value={formData.postcode}
+                  onChange={(e) => handleInputChange('postcode', e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="location_address">Full Address</Label>
+              <Input
+                id="location_address"
+                placeholder="e.g., Lot 5, Jalan Industri, Shah Alam"
+                value={formData.location_address}
+                onChange={(e) => handleInputChange('location_address', e.target.value)}
+              />
             </div>
           </CardContent>
         </Card>

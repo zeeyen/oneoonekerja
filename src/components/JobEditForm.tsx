@@ -36,6 +36,8 @@ export interface JobEditFormData {
   min_experience_years: number;
   expire_by: string;
   url: string;
+  postcode: string;
+  location_address: string;
 }
 
 interface JobEditFormProps {
@@ -59,6 +61,8 @@ export function JobEditForm({ job, onSave, onCancel, isSaving }: JobEditFormProp
     min_experience_years: job.min_experience_years || 0,
     expire_by: job.expire_by || '',
     url: job.url || '',
+    postcode: job.postcode || '',
+    location_address: job.location_address || '',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -196,6 +200,26 @@ export function JobEditForm({ job, onSave, onCancel, isSaving }: JobEditFormProp
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="postcode">Postcode</Label>
+              <Input
+                id="postcode"
+                value={formData.postcode}
+                onChange={(e) => handleInputChange('postcode', e.target.value)}
+                placeholder="e.g., 40000"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="location_address">Full Address</Label>
+              <Input
+                id="location_address"
+                value={formData.location_address}
+                onChange={(e) => handleInputChange('location_address', e.target.value)}
+                placeholder="e.g., Lot 5, Jalan Industri"
+              />
             </div>
 
             <div>

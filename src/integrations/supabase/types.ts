@@ -336,60 +336,72 @@ export type Database = {
       jobs: {
         Row: {
           company: string | null
+          country: string | null
           created_at: string | null
           expire_by: string
+          external_job_id: string | null
           gender_requirement: string | null
           id: string
           industry: string | null
           last_edited_at: string | null
           last_edited_by: string | null
           latitude: number | null
+          location_address: string | null
           location_city: string | null
           location_state: string | null
           longitude: number | null
           max_age: number | null
           min_age: number | null
           min_experience_years: number | null
+          postcode: string | null
           salary_range: string | null
           title: string
           url: string | null
         }
         Insert: {
           company?: string | null
+          country?: string | null
           created_at?: string | null
           expire_by: string
+          external_job_id?: string | null
           gender_requirement?: string | null
           id?: string
           industry?: string | null
           last_edited_at?: string | null
           last_edited_by?: string | null
           latitude?: number | null
+          location_address?: string | null
           location_city?: string | null
           location_state?: string | null
           longitude?: number | null
           max_age?: number | null
           min_age?: number | null
           min_experience_years?: number | null
+          postcode?: string | null
           salary_range?: string | null
           title: string
           url?: string | null
         }
         Update: {
           company?: string | null
+          country?: string | null
           created_at?: string | null
           expire_by?: string
+          external_job_id?: string | null
           gender_requirement?: string | null
           id?: string
           industry?: string | null
           last_edited_at?: string | null
           last_edited_by?: string | null
           latitude?: number | null
+          location_address?: string | null
           location_city?: string | null
           location_state?: string | null
           longitude?: number | null
           max_age?: number | null
           min_age?: number | null
           min_experience_years?: number | null
+          postcode?: string | null
           salary_range?: string | null
           title?: string
           url?: string | null

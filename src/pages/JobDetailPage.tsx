@@ -92,6 +92,8 @@ export default function JobDetailPage() {
           min_experience_years: formData.min_experience_years,
           expire_by: formData.expire_by,
           url: formData.url || null,
+          postcode: formData.postcode || null,
+          location_address: formData.location_address || null,
           last_edited_by: user.email,
           last_edited_at: new Date().toISOString(),
         })
@@ -242,6 +244,12 @@ export default function JobDetailPage() {
                     {[job.location_city, job.location_state].filter(Boolean).join(', ') ||
                       'Not specified'}
                   </p>
+                  {job.postcode && (
+                    <p className="text-sm text-muted-foreground">Postcode: {job.postcode}</p>
+                  )}
+                  {job.location_address && (
+                    <p className="text-sm text-muted-foreground">{job.location_address}</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
