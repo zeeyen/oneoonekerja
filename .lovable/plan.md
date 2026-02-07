@@ -1,67 +1,92 @@
 
 
-## Add New Columns to Jobs Table and Enhance Location Resolution
+## AI-Powered Geocoding Fallback via Lovable AI Gateway
 
 ### Overview
-Add four new columns (`external_job_id`, `location_address`, `postcode`, `country`) to the `jobs` table, and enhance the bulk import geocoding logic to use the `location` and `postcode` fields as additional inputs when resolving latitude/longitude.
+When the local `malaysia_locations` lookup fails to resolve lat/lng for a job, use the Lovable AI Gateway as a final fallback. An edge function will send the location fields (city, state, location_address, postcode, country) to the AI model and ask it to return coordinates.
 
-### Database Migration
+### Architecture
 
-Add four columns to the `jobs` table:
-
-```sql
-ALTER TABLE public.jobs
-  ADD COLUMN IF NOT EXISTS external_job_id TEXT,
-  ADD COLUMN IF NOT EXISTS location_address TEXT,
-  ADD COLUMN IF NOT EXISTS postcode TEXT,
-  ADD COLUMN IF NOT EXISTS country TEXT DEFAULT 'Malaysia';
+```text
+CSV Import (browser)
+  |
+  v
+Local lookup (malaysia_locations table)
+  |
+  +--> Resolved? Done.
+  |
+  +--> Not resolved? Call edge function
+         |
+         v
+       Edge Function: geocode-location
+         |
+         v
+       Lovable AI Gateway (google/gemini-3-flash-preview)
+         |
+         v
+       Returns { latitude, longitude } or null
 ```
 
-- `external_job_id` -- stores the source system's job ID (e.g. "JOB003")
-- `location_address` -- stores the full location string from the CSV (e.g. "PORT KLANG, ")
-- `postcode` -- five-digit postal code
-- `country` -- defaults to "Malaysia"
+### Edge Function: `supabase/functions/geocode-location/index.ts`
 
-### Enhanced Location Resolution
+- Accepts POST with `{ city, state, location_address, postcode, country }`
+- Calls Lovable AI Gateway at `https://ai.gateway.lovable.dev/v1/chat/completions`
+- Uses tool calling to extract structured `{ latitude, longitude }` output
+- Model: `google/gemini-3-flash-preview` (fast, cheap)
+- Returns JSON `{ latitude: number, longitude: number }` or `{ latitude: null, longitude: null }` if unresolvable
+- Handles 429/402 errors gracefully
 
-Currently, lat/lng is resolved by matching `city` against `malaysia_locations.name`. The enhancement adds two fallback strategies:
-
-1. **Primary match** (existing): Match `city` against `malaysia_locations.name` within the same `state` (case-insensitive)
-2. **Fallback 1 -- location field**: If city match fails, try matching the `location` field (cleaned, trimmed) against `malaysia_locations.name`
-3. **Fallback 2 -- aliases**: Try matching `city` or `location` against `malaysia_locations.aliases` array
-
-This cascading approach maximizes the geocoding hit rate.
-
-### Files to Change
-
-**Database migration** (1 migration):
-- Add `external_job_id`, `location_address`, `postcode`, `country` columns to `jobs` table
-
-**`src/types/database.ts`**:
-- Add `external_job_id`, `location_address`, `postcode`, `country` fields to the `Job` interface
-
-**`src/hooks/useBulkImportJobs.ts`**:
-- Update `MalaysiaLocation` interface to include `aliases`
-- Fetch `aliases` column alongside existing location data
-- Update `resolveLocation` function to accept `location` as additional input and try alias matching
-- Map `job_id` to `external_job_id`, `location` to `location_address`, `postcode` and `country` in the insert records
-
-**`src/hooks/useBulkImportJobs.ts` -- resolveLocation enhanced logic**:
+Prompt strategy:
 ```
-1. Try city vs malaysia_locations.name (within state) -- existing
-2. Try location field vs malaysia_locations.name (within state)
-3. Try city or location vs malaysia_locations.aliases
-4. If all fail, return null (lat/lng will be empty)
+You are a geocoding assistant. Given location details in Malaysia, 
+return the latitude and longitude of the most likely location.
 ```
 
-**`src/components/JobEditForm.tsx`**:
-- Add `postcode` and `location_address` input fields to the edit form
-- Add these to the `JobEditFormData` interface
+With tool definition:
+```json
+{
+  "name": "return_coordinates",
+  "parameters": {
+    "properties": {
+      "latitude": { "type": "number" },
+      "longitude": { "type": "number" }
+    }
+  }
+}
+```
 
-**`src/pages/JobDetailPage.tsx`**:
-- Display `postcode`, `location_address`, and `external_job_id` in the job detail view
-- Include `postcode` and `location_address` in the save/update payload
+### Changes to `src/hooks/useBulkImportJobs.ts`
 
-**`src/hooks/useJobForm.ts`**:
-- Add `postcode`, `location_address`, `country` to `JobFormData` interface and defaults
+- After `resolveLocation` returns null, collect unresolved rows
+- Batch-call the edge function for unresolved rows (one call per row, throttled to avoid rate limits)
+- Update the row's `latitude`/`longitude` with AI results before insert
+- Add a small delay between calls (e.g., 200ms) to respect rate limits
+
+### Changes to `src/components/BulkImportJobsModal.tsx`
+
+- Add a new status indicator: "AI-resolved" (distinct from locally resolved)
+- Show progress during AI resolution phase ("Resolving locations... X/Y")
+- Add a secondary step between parsing and importing: location resolution
+
+### Flow Update
+
+Current flow: Upload CSV -> Parse -> Preview -> Import
+
+New flow: Upload CSV -> Parse -> Preview -> **Resolve locations (AI fallback)** -> Updated Preview -> Import
+
+The AI resolution step runs automatically after parsing. Rows that were unresolved locally get sent to the edge function. The preview table updates with resolved coordinates.
+
+### Cost and Rate Limit Considerations
+
+- Each unresolved row = 1 AI call (very small prompt, minimal tokens)
+- `google/gemini-3-flash-preview` is the cheapest/fastest option
+- Batch imports with many unresolved rows could hit rate limits; add 200ms delay between calls
+- Surface 429/402 errors as warnings (skip AI resolution for remaining rows, proceed with import)
+
+### Files to Create/Change
+
+1. **Create** `supabase/functions/geocode-location/index.ts` -- edge function
+2. **Update** `supabase/config.toml` -- register the function
+3. **Update** `src/hooks/useBulkImportJobs.ts` -- add AI fallback after local resolution
+4. **Update** `src/components/BulkImportJobsModal.tsx` -- show AI resolution progress and status
 
