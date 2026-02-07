@@ -1,1 +1,4 @@
 project_id = "gbvegikhzqxdxpldfdls"
+
+[functions.geocode-location]
+verify_jwt = false

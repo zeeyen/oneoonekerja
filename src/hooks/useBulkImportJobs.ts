@@ -23,12 +23,15 @@ export interface CsvRow {
   age_max: string;
 }
 
+export type ResolutionMethod = 'local' | 'ai' | null;
+
 export interface ParsedRow {
   rowNumber: number;
   raw: CsvRow;
   latitude: number | null;
   longitude: number | null;
   locationResolved: boolean;
+  resolutionMethod: ResolutionMethod;
   errors: string[];
 }
 
@@ -46,8 +49,8 @@ const CSV_HEADERS = [
   'url', 'created_at', 'end_date', 'age_min', 'age_max',
 ] as const;
 
-const VALID_GENDERS = ['any', 'male', 'female', 'both'];
 const CHUNK_SIZE = 50;
+const AI_DELAY_MS = 200;
 
 export function generateCsvTemplate(): string {
   return CSV_HEADERS.join(',') + '\n';
@@ -62,13 +65,9 @@ function cleanNull(val: string): string {
 function convertDate(raw: string): string | null {
   const cleaned = cleanNull(raw);
   if (!cleaned) return null;
-
-  // Already YYYY-MM-DD?
   if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) {
     return isNaN(new Date(cleaned).getTime()) ? null : cleaned;
   }
-
-  // DD/MM/YYYY
   const match = cleaned.match(/^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$/);
   if (!match) return null;
   const [, dd, mm, yyyy] = match;
@@ -113,7 +112,6 @@ export function parseCsvContent(content: string): { rows: CsvRow[]; headerError:
   if (lines.length < 2) return { rows: [], headerError: 'CSV must have a header row and at least one data row.' };
 
   const headers = parseCsvLine(lines[0]).map((h) => h.toLowerCase().trim());
-  // Only require the essential columns
   const required = ['job_title', 'end_date'] as const;
   const missing = required.filter((h) => !headers.includes(h));
   if (missing.length > 0) {
@@ -167,7 +165,6 @@ function resolveLocation(
   const stateClean = cleanNull(state).toLowerCase();
   const locationClean = cleanNull(locationField).toLowerCase().replace(/,\s*$/, '').trim();
 
-  // Helper to check a candidate against a location entry
   const matches = (loc: MalaysiaLocation, candidate: string) =>
     loc.name.toLowerCase() === candidate ||
     (loc.aliases ?? []).some((a) => a.toLowerCase() === candidate);
@@ -175,19 +172,16 @@ function resolveLocation(
   const stateFilter = (loc: MalaysiaLocation) =>
     !stateClean || loc.state.toLowerCase() === stateClean;
 
-  // 1. City match (within state)
   if (cityClean) {
     const m = locations.find((loc) => stateFilter(loc) && matches(loc, cityClean));
     if (m) return { latitude: m.latitude, longitude: m.longitude };
   }
 
-  // 2. Location field match (within state)
   if (locationClean) {
     const m = locations.find((loc) => stateFilter(loc) && matches(loc, locationClean));
     if (m) return { latitude: m.latitude, longitude: m.longitude };
   }
 
-  // 3. City or location without state filter
   const candidate = cityClean || locationClean;
   if (candidate) {
     const m = locations.find((loc) => matches(loc, candidate));
@@ -197,6 +191,8 @@ function resolveLocation(
   return null;
 }
 
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export function useBulkImportJobs() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -204,6 +200,8 @@ export function useBulkImportJobs() {
   const [locationsLoaded, setLocationsLoaded] = useState(false);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [aiResolving, setAiResolving] = useState(false);
+  const [aiProgress, setAiProgress] = useState({ current: 0, total: 0 });
 
   const fetchLocations = useCallback(async () => {
     if (locationsLoaded) return;
@@ -227,11 +225,74 @@ export function useBulkImportJobs() {
           latitude: resolved?.latitude ?? null,
           longitude: resolved?.longitude ?? null,
           locationResolved: resolved !== null,
+          resolutionMethod: resolved ? 'local' as ResolutionMethod : null,
           errors,
         };
       });
     },
     [locations],
+  );
+
+  const resolveWithAi = useCallback(
+    async (rows: ParsedRow[]): Promise<ParsedRow[]> => {
+      const unresolvedIndices = rows
+        .map((r, i) => (!r.locationResolved && r.errors.length === 0 ? i : -1))
+        .filter((i) => i !== -1);
+
+      if (unresolvedIndices.length === 0) return rows;
+
+      setAiResolving(true);
+      setAiProgress({ current: 0, total: unresolvedIndices.length });
+
+      const updated = [...rows];
+      let rateLimited = false;
+
+      for (let idx = 0; idx < unresolvedIndices.length; idx++) {
+        if (rateLimited) break;
+
+        const rowIdx = unresolvedIndices[idx];
+        const row = updated[rowIdx];
+
+        try {
+          const { data, error } = await supabase.functions.invoke('geocode-location', {
+            body: {
+              city: cleanNull(row.raw.city),
+              state: cleanNull(row.raw.state),
+              location_address: cleanNull(row.raw.location),
+              postcode: cleanNull(row.raw.postcode),
+              country: cleanNull(row.raw.country) || 'Malaysia',
+            },
+          });
+
+          if (error) {
+            console.warn('AI geocode error for row', row.rowNumber, error);
+          } else if (data?.latitude != null && data?.longitude != null) {
+            updated[rowIdx] = {
+              ...row,
+              latitude: data.latitude,
+              longitude: data.longitude,
+              locationResolved: true,
+              resolutionMethod: 'ai' as ResolutionMethod,
+            };
+          } else if (data?.error === 'rate_limited' || data?.error === 'payment_required') {
+            rateLimited = true;
+            console.warn('AI geocoding stopped:', data.error);
+          }
+        } catch (e) {
+          console.warn('AI geocode call failed for row', row.rowNumber, e);
+        }
+
+        setAiProgress({ current: idx + 1, total: unresolvedIndices.length });
+
+        if (idx < unresolvedIndices.length - 1 && !rateLimited) {
+          await delay(AI_DELAY_MS);
+        }
+      }
+
+      setAiResolving(false);
+      return updated;
+    },
+    [],
   );
 
   const importRows = useCallback(
@@ -295,6 +356,9 @@ export function useBulkImportJobs() {
     fetchLocations,
     locationsLoaded,
     processRows,
+    resolveWithAi,
+    aiResolving,
+    aiProgress,
     importRows,
     importing,
     progress,
