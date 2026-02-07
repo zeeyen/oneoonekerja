@@ -18,6 +18,9 @@ export interface JobFormData {
   expire_by: string; // date string YYYY-MM-DD
   min_age: number | null;
   max_age: number | null;
+  postcode: string;
+  location_address: string;
+  country: string;
 }
 
 export const defaultJobFormData: JobFormData = {
@@ -33,6 +36,9 @@ export const defaultJobFormData: JobFormData = {
   expire_by: '',
   min_age: null,
   max_age: null,
+  postcode: '',
+  location_address: '',
+  country: 'Malaysia',
 };
 
 async function fetchJobById(id: string): Promise<Job | null> {

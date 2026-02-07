@@ -37,6 +37,7 @@ interface MalaysiaLocation {
   state: string;
   latitude: number;
   longitude: number;
+  aliases: string[] | null;
 }
 
 const CSV_HEADERS = [
@@ -159,18 +160,41 @@ function validateRow(raw: CsvRow): string[] {
 function resolveLocation(
   city: string,
   state: string,
+  locationField: string,
   locations: MalaysiaLocation[],
 ): { latitude: number; longitude: number } | null {
   const cityClean = cleanNull(city).toLowerCase();
-  if (!cityClean) return null;
   const stateClean = cleanNull(state).toLowerCase();
+  const locationClean = cleanNull(locationField).toLowerCase().replace(/,\s*$/, '').trim();
 
-  const match = locations.find(
-    (loc) =>
-      loc.name.toLowerCase() === cityClean &&
-      (!stateClean || loc.state.toLowerCase() === stateClean),
-  );
-  return match ? { latitude: match.latitude, longitude: match.longitude } : null;
+  // Helper to check a candidate against a location entry
+  const matches = (loc: MalaysiaLocation, candidate: string) =>
+    loc.name.toLowerCase() === candidate ||
+    (loc.aliases ?? []).some((a) => a.toLowerCase() === candidate);
+
+  const stateFilter = (loc: MalaysiaLocation) =>
+    !stateClean || loc.state.toLowerCase() === stateClean;
+
+  // 1. City match (within state)
+  if (cityClean) {
+    const m = locations.find((loc) => stateFilter(loc) && matches(loc, cityClean));
+    if (m) return { latitude: m.latitude, longitude: m.longitude };
+  }
+
+  // 2. Location field match (within state)
+  if (locationClean) {
+    const m = locations.find((loc) => stateFilter(loc) && matches(loc, locationClean));
+    if (m) return { latitude: m.latitude, longitude: m.longitude };
+  }
+
+  // 3. City or location without state filter
+  const candidate = cityClean || locationClean;
+  if (candidate) {
+    const m = locations.find((loc) => matches(loc, candidate));
+    if (m) return { latitude: m.latitude, longitude: m.longitude };
+  }
+
+  return null;
 }
 
 export function useBulkImportJobs() {
@@ -185,7 +209,7 @@ export function useBulkImportJobs() {
     if (locationsLoaded) return;
     const { data, error } = await supabase
       .from('malaysia_locations')
-      .select('name, state, latitude, longitude');
+      .select('name, state, latitude, longitude, aliases');
     if (!error && data) {
       setLocations(data);
       setLocationsLoaded(true);
@@ -196,7 +220,7 @@ export function useBulkImportJobs() {
     (csvRows: CsvRow[]): ParsedRow[] => {
       return csvRows.map((raw, i) => {
         const errors = validateRow(raw);
-        const resolved = resolveLocation(raw.city, raw.state, locations);
+        const resolved = resolveLocation(raw.city, raw.state, raw.location, locations);
         return {
           rowNumber: i + 1,
           raw,
@@ -233,6 +257,10 @@ export function useBulkImportJobs() {
               industry: null,
               location_city: cityClean || null,
               location_state: stateClean || null,
+              location_address: cleanNull(r.raw.location) || null,
+              postcode: cleanNull(r.raw.postcode) || null,
+              country: cleanNull(r.raw.country) || 'Malaysia',
+              external_job_id: cleanNull(r.raw.job_id) || null,
               latitude: r.latitude,
               longitude: r.longitude,
               salary_range: cleanNull(r.raw.salary_range) || null,

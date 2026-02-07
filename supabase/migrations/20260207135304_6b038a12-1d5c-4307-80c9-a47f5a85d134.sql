@@ -1,0 +1,5 @@
+ALTER TABLE public.jobs
+  ADD COLUMN IF NOT EXISTS external_job_id TEXT,
+  ADD COLUMN IF NOT EXISTS location_address TEXT,
+  ADD COLUMN IF NOT EXISTS postcode TEXT,
+  ADD COLUMN IF NOT EXISTS country TEXT DEFAULT 'Malaysia';
