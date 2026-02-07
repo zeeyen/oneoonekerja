@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useBackfillGeocode, useUnresolvedJobsCount } from '@/hooks/useBackfillGeocode';
 import {
   useJobs,
   useActiveJobsCount,
@@ -16,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -39,7 +41,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
-import { Search, Briefcase, ExternalLink, Upload } from 'lucide-react';
+import { Search, Briefcase, ExternalLink, Upload, MapPin } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 import { useDebounce } from '@/hooks/useDebounce';
 
@@ -59,6 +61,9 @@ export default function JobsPage() {
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
+
+  const { data: unresolvedCount } = useUnresolvedJobsCount();
+  const { run: runBackfill, isRunning: isBackfilling, progress: backfillProgress } = useBackfillGeocode();
 
   const debouncedSearch = useDebounce(searchInput, 300);
 
@@ -152,11 +157,39 @@ export default function JobsPage() {
             </p>
           </div>
         </div>
-        <Button variant="outline" onClick={() => setBulkImportOpen(true)}>
-          <Upload className="h-4 w-4 mr-2" />
-          Bulk Import
-        </Button>
+        <div className="flex gap-2">
+          {unresolvedCount !== undefined && unresolvedCount > 0 && (
+            <Button
+              variant="outline"
+              onClick={runBackfill}
+              disabled={isBackfilling}
+            >
+              <MapPin className="h-4 w-4 mr-2" />
+              {isBackfilling && backfillProgress
+                ? `Resolving... ${backfillProgress.current}/${backfillProgress.total}`
+                : `Backfill Coordinates (${unresolvedCount})`}
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => setBulkImportOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Bulk Import
+          </Button>
+        </div>
       </div>
+
+      {isBackfilling && backfillProgress && (
+        <Card className="shadow-sm">
+          <CardContent className="pt-6">
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Resolving coordinates... {backfillProgress.current}/{backfillProgress.total}
+                {backfillProgress.resolved > 0 && ` (${backfillProgress.resolved} resolved)`}
+              </p>
+              <Progress value={(backfillProgress.current / backfillProgress.total) * 100} />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <BulkImportJobsModal open={bulkImportOpen} onOpenChange={setBulkImportOpen} />
 
