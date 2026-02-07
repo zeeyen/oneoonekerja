@@ -1,55 +1,54 @@
 
 
-## Bulk Update Jobs via CSV Import
+## Adapt Bulk Import to Match Real CSV Format
 
-### Overview
-Add a CSV bulk import feature to the Jobs page that lets admins upload a CSV file to create or update jobs in bulk. During import, the system will automatically resolve `latitude` and `longitude` from the `location_city` and `location_state` fields using the existing `malaysia_locations` lookup table (427 pre-geocoded cities).
+### Problem
+The current bulk import expects a custom template with specific column names (`title`, `company`, `expire_by`, etc.), but the actual export file uses different column names (`job_title`, `company_name`, `end_date`, etc.) and different data formats (dates as DD/MM/YYYY, gender as "Both" instead of "any", and literal "NULL" strings).
 
-### User Flow
-1. Admin clicks "Bulk Import" button on the Jobs page header
-2. A modal dialog opens with:
-   - A "Download Template" button to get a sample CSV with correct headers
-   - A file upload area for the CSV
-3. After uploading, the system parses the CSV and shows a preview table with validation status per row
-4. Rows with unresolved locations are flagged with a warning (import still allowed, just no lat/lng)
-5. Admin clicks "Import" to upsert all valid rows into the database
-6. A summary toast shows how many rows were created/updated and how many had location warnings
+### Column Mapping
 
-### Technical Details
+| Source CSV Column  | Maps To (DB)         | Transform Needed                     |
+|--------------------|----------------------|--------------------------------------|
+| `job_title`        | `title`              | Direct                               |
+| `company_name`     | `company`            | Direct                               |
+| `city`             | `location_city`      | Strip "NULL" strings                 |
+| `state`            | `location_state`     | Strip "NULL" strings                 |
+| `salary_range`     | `salary_range`       | Direct (keep as-is, e.g. "RM 102/day") |
+| `gender_requirement` | `gender_requirement` | "Both" to "any", lowercase           |
+| `url`              | `url`                | Direct                               |
+| `end_date`         | `expire_by`          | Convert DD/MM/YYYY to YYYY-MM-DD     |
+| `age_min`          | `min_age`            | Direct number                        |
+| `age_max`          | `max_age`            | Direct number                        |
+| (not present)      | `industry`           | Default to null                      |
+| (not present)      | `min_experience_years` | Default to 0                       |
+| `id`, `job_id`, `location`, `postcode`, `country`, `created_at` | (ignored) | Skipped during import |
 
-**New files:**
-- `src/components/BulkImportJobsModal.tsx` -- Modal with file upload, CSV parsing, preview table, and import logic
-- `src/hooks/useBulkImportJobs.ts` -- Hook containing CSV parsing, location resolution, and upsert mutation
+### Changes
 
-**Modified files:**
-- `src/pages/JobsPage.tsx` -- Add "Bulk Import" button next to the page header
+**File: `src/hooks/useBulkImportJobs.ts`**
 
-**CSV Template Columns:**
-```text
-title, company, industry, location_city, location_state, salary_range, gender_requirement, min_age, max_age, min_experience_years, expire_by, url
-```
+1. Update `CSV_HEADERS` to match the source file columns: `id, job_id, job_title, company_name, location, postcode, city, state, country, salary_range, gender_requirement, url, created_at, end_date, age_min, age_max`
+2. Update `CsvRow` interface to match these source column names
+3. Add a transform step that maps source columns to DB fields:
+   - `job_title` to `title`
+   - `company_name` to `company`
+   - `city` to `location_city` (treat "NULL" as empty)
+   - `state` to `location_state` (treat "NULL" as empty)
+   - `end_date` DD/MM/YYYY to `expire_by` YYYY-MM-DD
+   - `gender_requirement` "Both" to "any"
+   - `age_min`/`age_max` renamed to `min_age`/`max_age`
+4. Update `validateRow` to work with the new field names
+5. Update `generateCsvTemplate()` to output the correct source headers
+6. Update date validation to accept DD/MM/YYYY format (converting internally)
 
-**Location Resolution Logic (client-side):**
-1. Fetch all rows from `malaysia_locations` table once when the modal opens
-2. For each CSV row, match `location_city` against `malaysia_locations.name` (case-insensitive) within the matching `state`
-3. If found, populate `latitude` and `longitude` from the lookup
-4. If not found, flag the row with a warning but still allow import (lat/lng will be null)
+**File: `src/components/BulkImportJobsModal.tsx`**
 
-**Database Upsert:**
-- Use Supabase `.upsert()` with no conflict key (all rows are inserts as new jobs)
-- Or if a job `title + company + location_state` combination already exists, update it (optional -- default is insert-only)
-- Each row sets `last_edited_at = now()` and `last_edited_by = current user id`
-- Batch upsert in chunks of 50 rows to avoid hitting request size limits
+7. No structural changes needed -- the preview table already reads from `raw.title`, `raw.company`, etc. These references will be updated to match the new `CsvRow` field names (`raw.job_title`, `raw.company_name`, `raw.city`, `raw.state`, `raw.end_date`)
 
-**Validation per row:**
-- `title` is required
-- `expire_by` must be a valid date (YYYY-MM-DD)
-- `gender_requirement` must be one of: `any`, `male`, `female` (defaults to `any`)
-- `min_age`/`max_age` must be numbers if provided
-- `min_experience_years` defaults to 0
+### Data Handling Details
 
-**UI Details:**
-- The preview table shows: row number, title, company, location, resolved lat/lng status (checkmark or warning icon), and any validation errors
-- Import button is disabled until at least one valid row exists
-- Progress indicator during import
-- After successful import, the jobs list auto-refreshes
+- **"NULL" strings**: The source CSV uses literal `NULL` text for missing values. The parser will treat any value that is exactly "NULL" (case-insensitive) as empty.
+- **Date conversion**: `DD/MM/YYYY` will be parsed and converted to `YYYY-MM-DD` for the database. Invalid dates will show a validation error.
+- **Gender mapping**: "Both" maps to "any", "Male" to "male", "Female" to "female".
+- **Template download**: Will generate headers matching the source CSV format so users can fill in new data using the same structure.
+
