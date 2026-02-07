@@ -3,19 +3,24 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
+/** Columns as they appear in the source CSV export */
 export interface CsvRow {
-  title: string;
-  company: string;
-  industry: string;
-  location_city: string;
-  location_state: string;
+  id: string;
+  job_id: string;
+  job_title: string;
+  company_name: string;
+  location: string;
+  postcode: string;
+  city: string;
+  state: string;
+  country: string;
   salary_range: string;
   gender_requirement: string;
-  min_age: string;
-  max_age: string;
-  min_experience_years: string;
-  expire_by: string;
   url: string;
+  created_at: string;
+  end_date: string;
+  age_min: string;
+  age_max: string;
 }
 
 export interface ParsedRow {
@@ -35,17 +40,46 @@ interface MalaysiaLocation {
 }
 
 const CSV_HEADERS = [
-  'title', 'company', 'industry', 'location_city', 'location_state',
-  'salary_range', 'gender_requirement', 'min_age', 'max_age',
-  'min_experience_years', 'expire_by', 'url',
+  'id', 'job_id', 'job_title', 'company_name', 'location', 'postcode',
+  'city', 'state', 'country', 'salary_range', 'gender_requirement',
+  'url', 'created_at', 'end_date', 'age_min', 'age_max',
 ] as const;
 
-const VALID_GENDERS = ['any', 'male', 'female'];
-const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const VALID_GENDERS = ['any', 'male', 'female', 'both'];
 const CHUNK_SIZE = 50;
 
 export function generateCsvTemplate(): string {
   return CSV_HEADERS.join(',') + '\n';
+}
+
+/** Treat literal "NULL" (case-insensitive) as empty */
+function cleanNull(val: string): string {
+  return val.trim().toUpperCase() === 'NULL' ? '' : val.trim();
+}
+
+/** Convert DD/MM/YYYY to YYYY-MM-DD. Returns null if invalid. */
+function convertDate(raw: string): string | null {
+  const cleaned = cleanNull(raw);
+  if (!cleaned) return null;
+
+  // Already YYYY-MM-DD?
+  if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) {
+    return isNaN(new Date(cleaned).getTime()) ? null : cleaned;
+  }
+
+  // DD/MM/YYYY
+  const match = cleaned.match(/^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$/);
+  if (!match) return null;
+  const [, dd, mm, yyyy] = match;
+  const iso = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+  return isNaN(new Date(iso).getTime()) ? null : iso;
+}
+
+/** Map gender values: "Both" → "any", etc. */
+function normalizeGender(raw: string): string {
+  const cleaned = cleanNull(raw).toLowerCase();
+  if (!cleaned || cleaned === 'both') return 'any';
+  return cleaned;
 }
 
 function parseCsvLine(line: string): string[] {
@@ -78,9 +112,11 @@ export function parseCsvContent(content: string): { rows: CsvRow[]; headerError:
   if (lines.length < 2) return { rows: [], headerError: 'CSV must have a header row and at least one data row.' };
 
   const headers = parseCsvLine(lines[0]).map((h) => h.toLowerCase().trim());
-  const missing = CSV_HEADERS.filter((h) => !headers.includes(h));
+  // Only require the essential columns
+  const required = ['job_title', 'end_date'] as const;
+  const missing = required.filter((h) => !headers.includes(h));
   if (missing.length > 0) {
-    return { rows: [], headerError: `Missing columns: ${missing.join(', ')}` };
+    return { rows: [], headerError: `Missing required columns: ${missing.join(', ')}` };
   }
 
   const headerIndex = Object.fromEntries(headers.map((h, i) => [h, i]));
@@ -90,7 +126,7 @@ export function parseCsvContent(content: string): { rows: CsvRow[]; headerError:
     const values = parseCsvLine(lines[i]);
     const row: Record<string, string> = {};
     for (const h of CSV_HEADERS) {
-      row[h] = values[headerIndex[h]] ?? '';
+      row[h] = headerIndex[h] !== undefined ? (values[headerIndex[h]] ?? '') : '';
     }
     rows.push(row as unknown as CsvRow);
   }
@@ -100,19 +136,23 @@ export function parseCsvContent(content: string): { rows: CsvRow[]; headerError:
 
 function validateRow(raw: CsvRow): string[] {
   const errors: string[] = [];
-  if (!raw.title.trim()) errors.push('Title is required');
-  if (!raw.expire_by.trim()) {
-    errors.push('Expire date is required');
-  } else if (!DATE_REGEX.test(raw.expire_by.trim())) {
-    errors.push('Expire date must be YYYY-MM-DD');
-  } else if (isNaN(new Date(raw.expire_by.trim()).getTime())) {
-    errors.push('Expire date is invalid');
+  if (!cleanNull(raw.job_title)) errors.push('Job title is required');
+
+  const dateVal = cleanNull(raw.end_date);
+  if (!dateVal) {
+    errors.push('End date is required');
+  } else if (!convertDate(raw.end_date)) {
+    errors.push('End date must be DD/MM/YYYY or YYYY-MM-DD');
   }
-  const gender = (raw.gender_requirement || 'any').toLowerCase().trim();
-  if (!VALID_GENDERS.includes(gender)) errors.push('Gender must be any, male, or female');
-  if (raw.min_age && isNaN(Number(raw.min_age))) errors.push('Min age must be a number');
-  if (raw.max_age && isNaN(Number(raw.max_age))) errors.push('Max age must be a number');
-  if (raw.min_experience_years && isNaN(Number(raw.min_experience_years))) errors.push('Experience must be a number');
+
+  const gender = normalizeGender(raw.gender_requirement);
+  if (!['any', 'male', 'female'].includes(gender)) errors.push('Gender must be any, male, female, or Both');
+
+  const ageMin = cleanNull(raw.age_min);
+  const ageMax = cleanNull(raw.age_max);
+  if (ageMin && isNaN(Number(ageMin))) errors.push('age_min must be a number');
+  if (ageMax && isNaN(Number(ageMax))) errors.push('age_max must be a number');
+
   return errors;
 }
 
@@ -121,14 +161,14 @@ function resolveLocation(
   state: string,
   locations: MalaysiaLocation[],
 ): { latitude: number; longitude: number } | null {
-  if (!city.trim()) return null;
-  const cityLower = city.trim().toLowerCase();
-  const stateLower = state.trim().toLowerCase();
+  const cityClean = cleanNull(city).toLowerCase();
+  if (!cityClean) return null;
+  const stateClean = cleanNull(state).toLowerCase();
 
   const match = locations.find(
     (loc) =>
-      loc.name.toLowerCase() === cityLower &&
-      (!stateLower || loc.state.toLowerCase() === stateLower),
+      loc.name.toLowerCase() === cityClean &&
+      (!stateClean || loc.state.toLowerCase() === stateClean),
   );
   return match ? { latitude: match.latitude, longitude: match.longitude } : null;
 }
@@ -156,7 +196,7 @@ export function useBulkImportJobs() {
     (csvRows: CsvRow[]): ParsedRow[] => {
       return csvRows.map((raw, i) => {
         const errors = validateRow(raw);
-        const resolved = resolveLocation(raw.location_city, raw.location_state, locations);
+        const resolved = resolveLocation(raw.city, raw.state, locations);
         return {
           rowNumber: i + 1,
           raw,
@@ -185,22 +225,23 @@ export function useBulkImportJobs() {
           const chunk = validRows.slice(i, i + CHUNK_SIZE);
           const records = chunk.map((r) => {
             if (!r.locationResolved) locationWarnings++;
-            const gender = (r.raw.gender_requirement || 'any').toLowerCase().trim();
+            const cityClean = cleanNull(r.raw.city);
+            const stateClean = cleanNull(r.raw.state);
             return {
-              title: r.raw.title.trim(),
-              company: r.raw.company.trim() || null,
-              industry: r.raw.industry.trim() || null,
-              location_city: r.raw.location_city.trim() || null,
-              location_state: r.raw.location_state.trim() || null,
+              title: cleanNull(r.raw.job_title),
+              company: cleanNull(r.raw.company_name) || null,
+              industry: null,
+              location_city: cityClean || null,
+              location_state: stateClean || null,
               latitude: r.latitude,
               longitude: r.longitude,
-              salary_range: r.raw.salary_range.trim() || null,
-              gender_requirement: gender,
-              min_age: r.raw.min_age ? Number(r.raw.min_age) : 18,
-              max_age: r.raw.max_age ? Number(r.raw.max_age) : 60,
-              min_experience_years: r.raw.min_experience_years ? Number(r.raw.min_experience_years) : 0,
-              expire_by: r.raw.expire_by.trim(),
-              url: r.raw.url.trim() || null,
+              salary_range: cleanNull(r.raw.salary_range) || null,
+              gender_requirement: normalizeGender(r.raw.gender_requirement),
+              min_age: cleanNull(r.raw.age_min) ? Number(r.raw.age_min) : 18,
+              max_age: cleanNull(r.raw.age_max) ? Number(r.raw.age_max) : 60,
+              min_experience_years: 0,
+              expire_by: convertDate(r.raw.end_date)!,
+              url: cleanNull(r.raw.url) || null,
               last_edited_at: new Date().toISOString(),
               last_edited_by: user?.id ?? null,
             };
