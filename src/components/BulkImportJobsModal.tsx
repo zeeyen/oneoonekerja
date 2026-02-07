@@ -18,7 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Upload, Download, CheckCircle2, AlertTriangle, XCircle, FileText } from 'lucide-react';
+import { Upload, Download, CheckCircle2, AlertTriangle, XCircle, FileText, Sparkles } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import {
   useBulkImportJobs,
@@ -38,8 +38,11 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
   const [parseError, setParseError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
 
-  const { fetchLocations, locationsLoaded, processRows, importRows, importing, progress } =
-    useBulkImportJobs();
+  const {
+    fetchLocations, locationsLoaded, processRows,
+    resolveWithAi, aiResolving, aiProgress,
+    importRows, importing, progress,
+  } = useBulkImportJobs();
 
   useEffect(() => {
     if (open) {
@@ -84,9 +87,22 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
     [processRows],
   );
 
+  const handleAiResolve = useCallback(async () => {
+    const updated = await resolveWithAi(parsedRows);
+    setParsedRows(updated);
+    const aiResolved = updated.filter((r) => r.resolutionMethod === 'ai').length;
+    if (aiResolved > 0) {
+      toast({ title: 'AI Resolution', description: `Resolved ${aiResolved} locations via AI.` });
+    } else {
+      toast({ title: 'AI Resolution', description: 'No additional locations could be resolved.' });
+    }
+  }, [resolveWithAi, parsedRows]);
+
   const validCount = parsedRows.filter((r) => r.errors.length === 0).length;
   const errorCount = parsedRows.filter((r) => r.errors.length > 0).length;
-  const warningCount = parsedRows.filter((r) => !r.locationResolved && r.errors.length === 0).length;
+  const unresolvedCount = parsedRows.filter((r) => !r.locationResolved && r.errors.length === 0).length;
+  const aiResolvedCount = parsedRows.filter((r) => r.resolutionMethod === 'ai').length;
+  const localResolvedCount = parsedRows.filter((r) => r.resolutionMethod === 'local').length;
 
   const handleImport = useCallback(async () => {
     try {
@@ -105,8 +121,10 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
     }
   }, [importRows, parsedRows, onOpenChange]);
 
+  const busy = importing || aiResolving;
+
   return (
-    <Dialog open={open} onOpenChange={importing ? undefined : onOpenChange}>
+    <Dialog open={open} onOpenChange={busy ? undefined : onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Bulk Import Jobs</DialogTitle>
@@ -123,7 +141,7 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
               variant="outline"
               size="sm"
               onClick={() => fileRef.current?.click()}
-              disabled={importing || !locationsLoaded}
+              disabled={busy || !locationsLoaded}
             >
               <Upload className="h-4 w-4 mr-2" />
               {locationsLoaded ? 'Upload CSV' : 'Loading locations...'}
@@ -152,7 +170,7 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
 
           {/* Summary badges */}
           {parsedRows.length > 0 && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="outline">{parsedRows.length} rows</Badge>
               <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
                 {validCount} valid
@@ -160,11 +178,39 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
               {errorCount > 0 && (
                 <Badge variant="destructive">{errorCount} errors</Badge>
               )}
-              {warningCount > 0 && (
-                <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-                  {warningCount} no coordinates
+              {localResolvedCount > 0 && (
+                <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                  {localResolvedCount} local geo
                 </Badge>
               )}
+              {aiResolvedCount > 0 && (
+                <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                  {aiResolvedCount} AI geo
+                </Badge>
+              )}
+              {unresolvedCount > 0 && (
+                <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                  {unresolvedCount} no coordinates
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {/* AI resolve button */}
+          {parsedRows.length > 0 && unresolvedCount > 0 && !aiResolving && (
+            <Button variant="outline" size="sm" onClick={handleAiResolve} disabled={busy}>
+              <Sparkles className="h-4 w-4 mr-2" />
+              Resolve {unresolvedCount} locations with AI
+            </Button>
+          )}
+
+          {/* AI resolving progress */}
+          {aiResolving && (
+            <div className="space-y-2">
+              <Progress value={aiProgress.total > 0 ? Math.round((aiProgress.current / aiProgress.total) * 100) : 0} className="h-2" />
+              <p className="text-sm text-muted-foreground text-center">
+                Resolving locations with AI... {aiProgress.current}/{aiProgress.total}
+              </p>
             </div>
           )}
 
@@ -200,7 +246,9 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
                           : '-'}
                       </TableCell>
                       <TableCell>
-                        {row.locationResolved ? (
+                        {row.resolutionMethod === 'ai' ? (
+                          <Sparkles className="h-4 w-4 text-purple-600" />
+                        ) : row.resolutionMethod === 'local' ? (
                           <CheckCircle2 className="h-4 w-4 text-green-600" />
                         ) : row.raw.city ? (
                           <AlertTriangle className="h-4 w-4 text-yellow-500" />
@@ -226,7 +274,7 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
             </ScrollArea>
           )}
 
-          {/* Progress bar */}
+          {/* Import progress bar */}
           {importing && (
             <div className="space-y-2">
               <Progress value={progress} className="h-2" />
@@ -238,10 +286,10 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={importing}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={handleImport} disabled={importing || validCount === 0}>
+          <Button onClick={handleImport} disabled={busy || validCount === 0}>
             {importing ? 'Importing...' : `Import ${validCount} Jobs`}
           </Button>
         </DialogFooter>
