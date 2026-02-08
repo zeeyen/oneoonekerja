@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PhoneLink } from '@/components/PhoneLink';
 import {
   useConversations,
   useConversationStats,
@@ -334,7 +335,7 @@ export default function ConversationsPage() {
                         <TableCell className="whitespace-nowrap">
                           {format(new Date(conv.created_at), 'MMM d, HH:mm:ss')}
                         </TableCell>
-                        <TableCell className="font-mono text-sm">{conv.phone_number}</TableCell>
+                        <TableCell><PhoneLink phoneNumber={conv.phone_number} /></TableCell>
                         <TableCell>
                           {conv.direction === 'inbound' ? (
                             <div className="flex items-center gap-1.5 text-blue-600">

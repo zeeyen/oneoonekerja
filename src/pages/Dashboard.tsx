@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PhoneLink } from '@/components/PhoneLink';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDashboardStats, useRecentApplicants, useDashboardRefresh } from '@/hooks/useDashboard';
@@ -201,8 +202,8 @@ export default function Dashboard() {
                     <TableCell className="font-medium">
                       {applicant.full_name || '-'}
                     </TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {formatPhoneNumber(applicant.phone_number)}
+                    <TableCell>
+                      <PhoneLink phoneNumber={applicant.phone_number} />
                     </TableCell>
                     <TableCell>
                       {applicant.location_city && applicant.location_state

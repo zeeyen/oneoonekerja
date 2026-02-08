@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 import { JobEditForm, type JobEditFormData } from '@/components/JobEditForm';
+import { PhoneLink } from '@/components/PhoneLink';
 
 const genderLabels: Record<string, string> = {
   any: 'Any',
@@ -355,8 +356,8 @@ export default function JobDetailPage() {
                           {match.applicant?.full_name || 'Unknown'}
                         </button>
                       </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {match.applicant?.phone_number || '-'}
+                      <TableCell>
+                        <PhoneLink phoneNumber={match.applicant?.phone_number} />
                       </TableCell>
                       <TableCell>
                         {match.match_score !== null ? (
