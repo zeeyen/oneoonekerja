@@ -1,57 +1,34 @@
 
+# Add WhatsApp Shortlinks to Phone Numbers
 
-## Backfill Geocoding for Existing Jobs with Missing Coordinates
+## Overview
+Make every phone number displayed in the admin portal clickable, linking to `https://wa.me/<number>` so admins can quickly message applicants on WhatsApp.
 
-### Problem
-There are ~20+ jobs already in the database with null `latitude`/`longitude` despite having usable location data (`location_address`, `postcode`, `location_city`, `location_state`). The AI geocoding fallback only runs during CSV import -- it does not retroactively fix existing records.
+## Changes
 
-### Solution
-Add a "Backfill Coordinates" button on the Jobs page that:
-1. Queries all jobs where `latitude IS NULL` and at least one location field is populated
-2. Calls the existing `geocode-location` edge function for each job (throttled, 200ms delay)
-3. Updates each job's `latitude`/`longitude` in the database
-4. Shows progress and results
+### 1. Create a shared `PhoneLink` component
+A small reusable component in `src/components/PhoneLink.tsx` that:
+- Accepts a phone number string (or null)
+- Strips non-digit characters to build the `wa.me` link
+- Renders a clickable link with the formatted phone number
+- Opens in a new tab
+- Styled with a subtle hover effect and WhatsApp-green accent
 
-### Files to Change
+### 2. Update all 5 phone number display locations
 
-**`src/pages/JobsPage.tsx`**:
-- Add a "Backfill Coordinates" button (visible to admins) near the existing action buttons
-- Wire it to a new hook
+| Page | File | What changes |
+|------|------|-------------|
+| Dashboard | `src/pages/Dashboard.tsx` (line 205) | Replace `{formatPhoneNumber(...)}` with `<PhoneLink>` |
+| Applicants list | `src/pages/ApplicantsPage.tsx` (line 302) | Replace `{applicant.phone_number}` with `<PhoneLink>` |
+| Applicant detail | `src/pages/ApplicantDetailPage.tsx` (line 116) | Replace plain `<span>` with `<PhoneLink>` |
+| Conversations | `src/pages/ConversationsPage.tsx` (line 337) | Replace `{conv.phone_number}` with `<PhoneLink>` |
+| Job detail (matches) | `src/pages/JobDetailPage.tsx` (line 359) | Replace `{match.applicant?.phone_number}` with `<PhoneLink>` |
 
-**`src/hooks/useBackfillGeocode.ts`** (new file):
-- Query jobs where `latitude IS NULL AND (location_address IS NOT NULL OR location_city IS NOT NULL OR postcode IS NOT NULL)`
-- For each job, call `supabase.functions.invoke('geocode-location', { body: { city, state, location_address, postcode, country } })`
-- On success, update the job record with the returned lat/lng
-- Throttle calls with 200ms delay to avoid rate limits
-- Track progress (current/total) and results (resolved count, failed count)
-- Handle 429/402 errors gracefully by stopping early
+## Technical Details
 
-### UI Behavior
-- Button shows "Backfill Coordinates (N unresolved)" with count of jobs needing resolution
-- While running: progress bar or text "Resolving... 5/20"
-- On completion: toast with "Resolved 18/20 jobs. 2 could not be resolved."
-- Button is disabled while backfill is in progress
-
-### Technical Details
-
-Query for unresolved jobs:
-```sql
-SELECT id, location_city, location_state, location_address, postcode, country
-FROM jobs
-WHERE latitude IS NULL
-  AND (location_address IS NOT NULL OR location_city IS NOT NULL OR postcode IS NOT NULL)
-```
-
-For each result, call the edge function and update:
-```typescript
-const { data } = await supabase.functions.invoke('geocode-location', {
-  body: { city: job.location_city, state: job.location_state, 
-          location_address: job.location_address, postcode: job.postcode, 
-          country: job.country || 'Malaysia' }
-});
-if (data?.latitude && data?.longitude) {
-  await supabase.from('jobs').update({ latitude: data.latitude, longitude: data.longitude }).eq('id', job.id);
-}
-```
-
-No new edge functions or migrations needed -- this reuses the existing `geocode-location` function.
+The `PhoneLink` component will:
+- Strip all non-digit characters to create the wa.me URL (e.g., `+60 12-345 6789` becomes `wa.me/60123456789`)
+- Keep the existing `formatPhoneNumber` display format from Dashboard for consistent formatting across all pages
+- Use `<a href="https://wa.me/..." target="_blank" rel="noopener noreferrer">` for the link
+- Use `e.stopPropagation()` on click to prevent triggering parent row click handlers (important for table rows that navigate on click)
+- Return `-` for null/empty phone numbers
