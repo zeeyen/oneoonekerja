@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { PhoneLink } from '@/components/PhoneLink';
 import { useNavigate } from 'react-router-dom';
 import { useApplicants, useTotalApplicantsCount, type ApplicantFilter } from '@/hooks/useApplicants';
 import { getApplicantStatusConfig, isApplicantBanned } from '@/lib/applicantStatusConfig';
@@ -298,8 +299,8 @@ export default function ApplicantsPage() {
                             <TableCell className="font-medium">
                               {applicant.full_name || 'Unknown'}
                             </TableCell>
-                            <TableCell className="font-mono text-sm">
-                              {applicant.phone_number}
+                            <TableCell>
+                              <PhoneLink phoneNumber={applicant.phone_number} />
                             </TableCell>
                             <TableCell>
                               {formatLocation(applicant.location_city, applicant.location_state)}

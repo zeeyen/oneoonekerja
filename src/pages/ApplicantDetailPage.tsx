@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
+import { PhoneLink } from '@/components/PhoneLink';
 import {
   useApplicantDetail,
   useApplicantJobMatches,
@@ -113,7 +114,7 @@ export default function ApplicantDetailPage() {
               </h1>
               <div className="flex items-center gap-2 mt-2 text-muted-foreground">
                 <Phone className="h-4 w-4" />
-                <span className="font-mono">{applicant.phone_number}</span>
+                <PhoneLink phoneNumber={applicant.phone_number} />
               </div>
             </div>
             <div className="flex items-center gap-3">
