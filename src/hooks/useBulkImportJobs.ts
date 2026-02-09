@@ -15,6 +15,8 @@ export interface CsvRow {
   state: string;
   country: string;
   salary_range: string;
+  wages_per_month: string;
+  wages_per_day: string;
   gender_requirement: string;
   url: string;
   created_at: string;
@@ -32,6 +34,7 @@ export interface ParsedRow {
   longitude: number | null;
   locationResolved: boolean;
   resolutionMethod: ResolutionMethod;
+  isExisting: boolean;
   errors: string[];
 }
 
@@ -45,8 +48,8 @@ interface MalaysiaLocation {
 
 const CSV_HEADERS = [
   'id', 'job_id', 'job_title', 'company_name', 'location', 'postcode',
-  'city', 'state', 'country', 'salary_range', 'gender_requirement',
-  'url', 'created_at', 'end_date', 'age_min', 'age_max',
+  'city', 'state', 'country', 'salary_range', 'wages_per_month', 'wages_per_day',
+  'gender_requirement', 'url', 'created_at', 'end_date', 'age_min', 'age_max',
 ] as const;
 
 const CHUNK_SIZE = 50;
@@ -193,6 +196,27 @@ function resolveLocation(
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Fetch all existing external_job_id values from the jobs table */
+async function fetchExistingJobIds(): Promise<Set<string>> {
+  const ids = new Set<string>();
+  let from = 0;
+  const pageSize = 1000;
+  while (true) {
+    const { data, error } = await supabase
+      .from('jobs')
+      .select('external_job_id')
+      .not('external_job_id', 'is', null)
+      .range(from, from + pageSize - 1);
+    if (error || !data || data.length === 0) break;
+    for (const row of data) {
+      if (row.external_job_id) ids.add(row.external_job_id);
+    }
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return ids;
+}
+
 export function useBulkImportJobs() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -215,10 +239,11 @@ export function useBulkImportJobs() {
   }, [locationsLoaded]);
 
   const processRows = useCallback(
-    (csvRows: CsvRow[]): ParsedRow[] => {
+    (csvRows: CsvRow[], existingIds?: Set<string>): ParsedRow[] => {
       return csvRows.map((raw, i) => {
         const errors = validateRow(raw);
         const resolved = resolveLocation(raw.city, raw.state, raw.location, locations);
+        const jobId = cleanNull(raw.job_id);
         return {
           rowNumber: i + 1,
           raw,
@@ -226,6 +251,7 @@ export function useBulkImportJobs() {
           longitude: resolved?.longitude ?? null,
           locationResolved: resolved !== null,
           resolutionMethod: resolved ? 'local' as ResolutionMethod : null,
+          isExisting: !!(jobId && existingIds?.has(jobId)),
           errors,
         };
       });
@@ -236,7 +262,7 @@ export function useBulkImportJobs() {
   const resolveWithAi = useCallback(
     async (rows: ParsedRow[]): Promise<ParsedRow[]> => {
       const unresolvedIndices = rows
-        .map((r, i) => (!r.locationResolved && r.errors.length === 0 ? i : -1))
+        .map((r, i) => (!r.locationResolved && r.errors.length === 0 && !r.isExisting ? i : -1))
         .filter((i) => i !== -1);
 
       if (unresolvedIndices.length === 0) return rows;
@@ -296,9 +322,10 @@ export function useBulkImportJobs() {
   );
 
   const importRows = useCallback(
-    async (rows: ParsedRow[]): Promise<{ inserted: number; locationWarnings: number }> => {
-      const validRows = rows.filter((r) => r.errors.length === 0);
-      if (validRows.length === 0) throw new Error('No valid rows to import');
+    async (rows: ParsedRow[]): Promise<{ inserted: number; skipped: number; locationWarnings: number }> => {
+      const newValidRows = rows.filter((r) => r.errors.length === 0 && !r.isExisting);
+      const skipped = rows.filter((r) => r.isExisting).length;
+      if (newValidRows.length === 0) throw new Error('No new valid rows to import');
 
       setImporting(true);
       setProgress(0);
@@ -306,8 +333,8 @@ export function useBulkImportJobs() {
       let locationWarnings = 0;
 
       try {
-        for (let i = 0; i < validRows.length; i += CHUNK_SIZE) {
-          const chunk = validRows.slice(i, i + CHUNK_SIZE);
+        for (let i = 0; i < newValidRows.length; i += CHUNK_SIZE) {
+          const chunk = newValidRows.slice(i, i + CHUNK_SIZE);
           const records = chunk.map((r) => {
             if (!r.locationResolved) locationWarnings++;
             const cityClean = cleanNull(r.raw.city);
@@ -339,12 +366,12 @@ export function useBulkImportJobs() {
           const { error } = await supabase.from('jobs').insert(records);
           if (error) throw error;
           inserted += chunk.length;
-          setProgress(Math.round((inserted / validRows.length) * 100));
+          setProgress(Math.round((inserted / newValidRows.length) * 100));
         }
 
         queryClient.invalidateQueries({ queryKey: ['jobs'] });
         queryClient.invalidateQueries({ queryKey: ['jobs-active-count'] });
-        return { inserted, locationWarnings };
+        return { inserted, skipped, locationWarnings };
       } finally {
         setImporting(false);
       }
@@ -354,6 +381,7 @@ export function useBulkImportJobs() {
 
   return {
     fetchLocations,
+    fetchExistingJobIds,
     locationsLoaded,
     processRows,
     resolveWithAi,
