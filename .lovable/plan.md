@@ -1,34 +1,30 @@
 
-# Add WhatsApp Shortlinks to Phone Numbers
 
-## Overview
-Make every phone number displayed in the admin portal clickable, linking to `https://wa.me/<number>` so admins can quickly message applicants on WhatsApp.
+## Bring `bot-processor` Edge Function into the Repository
 
-## Changes
+### What will happen
+The uploaded 2715-line source code will be added to the repository as `supabase/functions/bot-processor/index.ts` and the function config will be added to `supabase/config.toml`. Once saved, it will auto-deploy to Supabase, **replacing** the currently live version with identical code.
 
-### 1. Create a shared `PhoneLink` component
-A small reusable component in `src/components/PhoneLink.tsx` that:
-- Accepts a phone number string (or null)
-- Strips non-digit characters to build the `wa.me` link
-- Renders a clickable link with the formatted phone number
-- Opens in a new tab
-- Styled with a subtle hover effect and WhatsApp-green accent
+### Steps
 
-### 2. Update all 5 phone number display locations
+1. **Create `supabase/functions/bot-processor/index.ts`**
+   - Copy the uploaded file contents exactly as-is (all 2715 lines) into the project.
 
-| Page | File | What changes |
-|------|------|-------------|
-| Dashboard | `src/pages/Dashboard.tsx` (line 205) | Replace `{formatPhoneNumber(...)}` with `<PhoneLink>` |
-| Applicants list | `src/pages/ApplicantsPage.tsx` (line 302) | Replace `{applicant.phone_number}` with `<PhoneLink>` |
-| Applicant detail | `src/pages/ApplicantDetailPage.tsx` (line 116) | Replace plain `<span>` with `<PhoneLink>` |
-| Conversations | `src/pages/ConversationsPage.tsx` (line 337) | Replace `{conv.phone_number}` with `<PhoneLink>` |
-| Job detail (matches) | `src/pages/JobDetailPage.tsx` (line 359) | Replace `{match.applicant?.phone_number}` with `<PhoneLink>` |
+2. **Update `supabase/config.toml`**
+   - Add the `bot-processor` function config with `verify_jwt = false` (matching the current deployment, as noted in the source comment: `Deploy: supabase functions deploy bot-processor --no-verify-jwt`).
 
-## Technical Details
+### Secrets Check
 
-The `PhoneLink` component will:
-- Strip all non-digit characters to create the wa.me URL (e.g., `+60 12-345 6789` becomes `wa.me/60123456789`)
-- Keep the existing `formatPhoneNumber` display format from Dashboard for consistent formatting across all pages
-- Use `<a href="https://wa.me/..." target="_blank" rel="noopener noreferrer">` for the link
-- Use `e.stopPropagation()` on click to prevent triggering parent row click handlers (important for table rows that navigate on click)
-- Return `-` for null/empty phone numbers
+The function uses these environment variables:
+- `SUPABASE_URL` -- available in Supabase automatically
+- `SUPABASE_SERVICE_ROLE_KEY` -- available in Supabase automatically
+- `OPENAI_API_KEY` -- already configured in Supabase secrets
+- `AGENCY_BASE_URL` -- optional, defaults to `https://101kerja.com/apply`
+
+All required secrets are already configured. No action needed.
+
+### Risk Assessment
+
+- **Zero risk** -- the code is identical to what's currently running live. The first deployment will be a no-op functionally.
+- Future edits can then be made directly in this repo and will auto-deploy.
+
