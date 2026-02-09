@@ -1,30 +1,35 @@
 
 
-## Bring `bot-processor` Edge Function into the Repository
+## Add `external_job_id` to Job Displays in Bot Messages
 
-### What will happen
-The uploaded 2715-line source code will be added to the repository as `supabase/functions/bot-processor/index.ts` and the function config will be added to `supabase/config.toml`. Once saved, it will auto-deploy to Supabase, **replacing** the currently live version with identical code.
+### Overview
+Append the `external_job_id` (e.g., "JOB144") to job titles wherever they appear in WhatsApp bot replies, so users see titles like **"General Worker - Warehouse Yong Peng (JOB144)"** instead of just **"General Worker - Warehouse Yong Peng"**.
 
-### Steps
+### Changes
 
-1. **Create `supabase/functions/bot-processor/index.ts`**
-   - Copy the uploaded file contents exactly as-is (all 2715 lines) into the project.
+**1. Update `MatchedJob` interface (line ~242)**
+Add `external_job_id?: string` to the interface so the field is carried through conversation state.
 
-2. **Update `supabase/config.toml`**
-   - Add the `bot-processor` function config with `verify_jwt = false` (matching the current deployment, as noted in the source comment: `Deploy: supabase functions deploy bot-processor --no-verify-jwt`).
+**2. Include `external_job_id` when mapping jobs (line ~2463)**
+Where `topJobs` are built from query results, add `external_job_id: s.job.external_job_id` to the mapped object. Since the query already uses `select('*')`, the field is already fetched from the database.
 
-### Secrets Check
+**3. Update `formatJobsMessage` function (line ~2533)**
+Change the job title line from:
+```
+*1. General Worker - Warehouse Yong Peng*
+```
+to:
+```
+*1. General Worker - Warehouse Yong Peng (JOB144)*
+```
+By building a display title: `const displayTitle = job.external_job_id ? \`\${job.title} (\${job.external_job_id})\` : job.title`
 
-The function uses these environment variables:
-- `SUPABASE_URL` -- available in Supabase automatically
-- `SUPABASE_SERVICE_ROLE_KEY` -- available in Supabase automatically
-- `OPENAI_API_KEY` -- already configured in Supabase secrets
-- `AGENCY_BASE_URL` -- optional, defaults to `https://101kerja.com/apply`
+**4. Update job selection confirmation message (line ~2199)**
+Same pattern for the "Best! Adik pilih:" / "Great choice!" / confirmation messages -- use `displayTitle` with the external_job_id appended.
 
-All required secrets are already configured. No action needed.
-
-### Risk Assessment
-
-- **Zero risk** -- the code is identical to what's currently running live. The first deployment will be a no-op functionally.
-- Future edits can then be made directly in this repo and will auto-deploy.
+### Technical Details
+- The `external_job_id` field already exists in the `jobs` table and is fetched via `select('*')`.
+- The `MatchedJob` objects are stored in `conversation_state` (JSONB), so the new field will persist across paginated views.
+- If `external_job_id` is null/empty, the title displays as before (no parenthetical).
+- Redeploy `bot-processor` after changes.
 
