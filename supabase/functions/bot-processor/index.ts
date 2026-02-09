@@ -249,6 +249,7 @@ interface MatchedJob {
   url: string | null
   industry?: string
   distance?: number
+  external_job_id?: string
 }
 
 interface JobSelection {
@@ -2195,10 +2196,12 @@ async function handleMatchingConversational(
         updated_at: new Date().toISOString()
       }).eq('id', user.id)
 
+      const displayTitle = selectedJob.external_job_id ? `${selectedJob.title} (${selectedJob.external_job_id})` : selectedJob.title
+
       const response = getText(lang, {
-ms: `Best! Adik pilih:\n\n*${selectedJob.title}* di *${selectedJob.company}*\n📍 ${location}\n💰 ${salary}\n\n👉 Klik untuk daftar: ${applyUrl}\n\n⚠️ *PENTING:* Pilih kat sini baru langkah pertama! Adik WAJIB klik link dan daftar kat website untuk lengkapkan permohonan.\n\nBalas 'semula' nak cari kerja lain.`,
-        en: `Great choice!\n\n*${selectedJob.title}* at *${selectedJob.company}*\n📍 ${location}\n💰 ${salary}\n\n👉 Click to register: ${applyUrl}\n\n⚠️ *IMPORTANT:* Selecting here is just the first step! You MUST click the link and register on the website to complete your application.\n\nReply 'restart' to find more jobs.`,
-        zh: `好选择！\n\n*${selectedJob.company}* 的 *${selectedJob.title}*\n📍 ${location}\n💰 ${salary}\n\n👉 点击注册：${applyUrl}\n\n⚠️ *重要：* 在这里选择只是第一步！您必须点击链接并在网站上注册才能完成申请。\n\n回复「重新开始」找更多工作。`
+ms: `Best! Adik pilih:\n\n*${displayTitle}* di *${selectedJob.company}*\n📍 ${location}\n💰 ${salary}\n\n👉 Klik untuk daftar: ${applyUrl}\n\n⚠️ *PENTING:* Pilih kat sini baru langkah pertama! Adik WAJIB klik link dan daftar kat website untuk lengkapkan permohonan.\n\nBalas 'semula' nak cari kerja lain.`,
+        en: `Great choice!\n\n*${displayTitle}* at *${selectedJob.company}*\n📍 ${location}\n💰 ${salary}\n\n👉 Click to register: ${applyUrl}\n\n⚠️ *IMPORTANT:* Selecting here is just the first step! You MUST click the link and register on the website to complete your application.\n\nReply 'restart' to find more jobs.`,
+        zh: `好选择！\n\n*${selectedJob.company}* 的 *${displayTitle}*\n📍 ${location}\n💰 ${salary}\n\n👉 点击注册：${applyUrl}\n\n⚠️ *重要：* 在这里选择只是第一步！您必须点击链接并在网站上注册才能完成申请。\n\n回复「重新开始」找更多工作。`
       })
 
       return {
@@ -2469,7 +2472,8 @@ en: `Sorry, no job vacancies within 10km of ${locationText} at the moment.\n\nTi
     salary_range: s.job.salary_range,
     url: s.job.url,
     industry: s.job.industry,
-    distance: Math.round(s.distance) // Include distance for display
+    distance: Math.round(s.distance),
+    external_job_id: s.job.external_job_id
   }))
 
   const message = formatJobsMessage(topJobs, 0, lang)
@@ -2530,7 +2534,8 @@ function formatJobsMessage(jobs: MatchedJob[], startIndex: number, language: str
     const salary = job.salary_range || getText(language, { ms: 'Gaji negotiate', en: 'Negotiable', zh: '面议' })
     const applyUrl = job.url || `https://101kerja.com/job/${job.id}`
 
-    message += `*${jobNumber}. ${job.title}*\n`
+    const displayTitle = job.external_job_id ? `${job.title} (${job.external_job_id})` : job.title
+    message += `*${jobNumber}. ${displayTitle}*\n`
     message += `🏢 ${job.company}\n`
     message += `📍 ${l.location}: ${location}\n`
     message += `💰 ${l.salary}: ${salary}\n\n`
