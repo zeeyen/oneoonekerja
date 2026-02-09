@@ -2196,9 +2196,9 @@ async function handleMatchingConversational(
       }).eq('id', user.id)
 
       const response = getText(lang, {
-        ms: `Best! Adik pilih:\n\n*${selectedJob.title}* di *${selectedJob.company}*\n📍 ${location}\n💰 ${salary}\n\n👉 Klik untuk daftar: ${applyUrl}\n\n⚠️ *PENTING:* Pilih kat sini baru langkah pertama! Adik WAJIB klik link dan daftar kat website untuk lengkapkan permohonan.\n\nBalas 'restart' nak cari kerja lain.`,
+ms: `Best! Adik pilih:\n\n*${selectedJob.title}* di *${selectedJob.company}*\n📍 ${location}\n💰 ${salary}\n\n👉 Klik untuk daftar: ${applyUrl}\n\n⚠️ *PENTING:* Pilih kat sini baru langkah pertama! Adik WAJIB klik link dan daftar kat website untuk lengkapkan permohonan.\n\nBalas 'semula' nak cari kerja lain.`,
         en: `Great choice!\n\n*${selectedJob.title}* at *${selectedJob.company}*\n📍 ${location}\n💰 ${salary}\n\n👉 Click to register: ${applyUrl}\n\n⚠️ *IMPORTANT:* Selecting here is just the first step! You MUST click the link and register on the website to complete your application.\n\nReply 'restart' to find more jobs.`,
-        zh: `好选择！\n\n*${selectedJob.company}* 的 *${selectedJob.title}*\n📍 ${location}\n💰 ${salary}\n\n👉 点击注册：${applyUrl}\n\n⚠️ *重要：* 在这里选择只是第一步！您必须点击链接并在网站上注册才能完成申请。\n\n回复"restart"找更多工作。`
+        zh: `好选择！\n\n*${selectedJob.company}* 的 *${selectedJob.title}*\n📍 ${location}\n💰 ${salary}\n\n👉 点击注册：${applyUrl}\n\n⚠️ *重要：* 在这里选择只是第一步！您必须点击链接并在网站上注册才能完成申请。\n\n回复「重新开始」找更多工作。`
       })
 
       return {
@@ -2219,7 +2219,7 @@ async function handleMatchingConversational(
     if (newIndex >= matchedJobs.length) {
       // Show end-of-list message instead of cycling
       const endMessage = getText(lang, {
-        ms: `Dah habis senarai kerja! Adik dah tengok semua ${matchedJobs.length} kerja yang ada.\n\nNak buat apa?\n• Balas nombor (1-${matchedJobs.length}) untuk mohon mana-mana kerja\n• Balas 'restart' untuk cari semula dari awal`,
+        ms: `Dah habis senarai kerja! Adik dah tengok semua ${matchedJobs.length} kerja yang ada.\n\nNak buat apa?\n• Balas nombor (1-${matchedJobs.length}) untuk mohon mana-mana kerja\n• Balas 'semula' untuk cari semula dari awal`,
         en: `That's all the jobs! You've seen all ${matchedJobs.length} available jobs.\n\nWhat would you like to do?\n• Reply with a number (1-${matchedJobs.length}) to apply for any job\n• Reply 'restart' to search again from the beginning`,
         zh: `已经看完所有工作了！您已浏览了全部${matchedJobs.length}个职位。\n\n您想要：\n• 回复数字（1-${matchedJobs.length}）申请任何工作\n• 回复「重新开始」从头搜索`
       })
@@ -2452,7 +2452,7 @@ async function findAndPresentJobsConversational(user: User): Promise<{ message: 
     return {
       message: getText(lang, {
         ms: `Maaf, tiada kerja kosong dalam radius 10km dari ${locationText} buat masa ini.\n\nTip: Cuba masukkan lokasi lain dengan balas "semula".`,
-        en: `Sorry, no job vacancies within 10km of ${locationText} at the moment.\n\nTip: Try entering a different location by replying "restart".`,
+en: `Sorry, no job vacancies within 10km of ${locationText} at the moment.\n\nTip: Try entering a different location by replying "restart".`,
         zh: `抱歉，${locationText}10公里范围内目前没有职位空缺。\n\n提示：回复"重新"尝试输入其他位置。`
       }),
       jobs: []
