@@ -2,3 +2,6 @@ project_id = "gbvegikhzqxdxpldfdls"
 
 [functions.geocode-location]
 verify_jwt = false
+
+[functions.bot-processor]
+verify_jwt = false
