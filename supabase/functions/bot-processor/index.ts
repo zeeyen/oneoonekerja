@@ -886,10 +886,7 @@ async function handleRestartLocationChoice(user: User, message: string): Promise
     const updatedUser = {
       ...user,
       onboarding_status: 'matching',
-      conversation_state: {
-        matched_jobs: matchResult.jobs,
-        current_job_index: 0
-      }
+      conversation_state: buildPostSearchState(matchResult)
     }
 
     await supabase.from('applicants').update({
@@ -900,11 +897,14 @@ async function handleRestartLocationChoice(user: User, message: string): Promise
     }).eq('id', user.id)
 
     const firstName = user.full_name?.split(' ')[0] || ''
-    const responseText = getText(lang, {
-      ms: `Ok ${firstName}, Kak Ani carikan kerja dekat ${user.location_city || user.location_state}!\n\nJumpa ${matchResult.jobs.length} kerja:\n\n${matchResult.message}`,
-      en: `Ok ${firstName}, finding jobs near ${user.location_city || user.location_state}!\n\nFound ${matchResult.jobs.length} jobs:\n\n${matchResult.message}`,
-      zh: `好的${firstName}，正在查找${user.location_city || user.location_state}附近的工作！\n\n找到${matchResult.jobs.length}个工作：\n\n${matchResult.message}`
-    })
+    const jobCount = matchResult.jobs.length
+    const responseText = jobCount > 0
+      ? getText(lang, {
+          ms: `Ok ${firstName}, Kak Ani carikan kerja dekat ${user.location_city || user.location_state}!\n\nJumpa ${jobCount} kerja:\n\n${matchResult.message}`,
+          en: `Ok ${firstName}, finding jobs near ${user.location_city || user.location_state}!\n\nFound ${jobCount} jobs:\n\n${matchResult.message}`,
+          zh: `好的${firstName}，正在查找${user.location_city || user.location_state}附近的工作！\n\n找到${jobCount}个工作：\n\n${matchResult.message}`
+        })
+      : matchResult.message
 
     return { response: responseText, updatedUser }
 
@@ -1113,18 +1113,18 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
             // Now find jobs
             const matchResult = await findAndPresentJobsConversational(updatedUser)
             updatedUser.onboarding_status = 'matching'
-            updatedUser.conversation_state = {
-              matched_jobs: matchResult.jobs,
-              current_job_index: 0
-            }
+            updatedUser.conversation_state = buildPostSearchState(matchResult)
             nextStep = 'viewing_jobs'
 
             const firstName = updatedUser.full_name?.split(' ')[0] || ''
-            response = getText(lang, {
-              ms: `Ok noted!\nNama: ${updatedUser.full_name}\nUmur: ${updatedUser.age}\nJantina: ${updatedUser.gender === 'male' ? 'Lelaki' : 'Perempuan'}\n\nOkay ${firstName}, jap ye Kak Ani carikan...\n\nNi ${matchResult.jobs.length} kerja dekat dengan adik:\n\n${matchResult.message}`,
-              en: `Ok noted!\nName: ${updatedUser.full_name}\nAge: ${updatedUser.age}\nGender: ${updatedUser.gender === 'male' ? 'Male' : 'Female'}\n\nAlright ${firstName}, let me check...\n\nFound ${matchResult.jobs.length} jobs near you:\n\n${matchResult.message}`,
-              zh: `好的！\n姓名：${updatedUser.full_name}\n年龄：${updatedUser.age}\n性别：${updatedUser.gender === 'male' ? '男' : '女'}\n\n好的${firstName}，让我找找...\n\n找到${matchResult.jobs.length}个附近的工作：\n\n${matchResult.message}`
-            })
+            const jobCount = matchResult.jobs.length
+            response = jobCount > 0
+              ? getText(lang, {
+                  ms: `Ok noted!\nNama: ${updatedUser.full_name}\nUmur: ${updatedUser.age}\nJantina: ${updatedUser.gender === 'male' ? 'Lelaki' : 'Perempuan'}\n\nOkay ${firstName}, jap ye Kak Ani carikan...\n\nNi ${jobCount} kerja dekat dengan adik:\n\n${matchResult.message}`,
+                  en: `Ok noted!\nName: ${updatedUser.full_name}\nAge: ${updatedUser.age}\nGender: ${updatedUser.gender === 'male' ? 'Male' : 'Female'}\n\nAlright ${firstName}, let me check...\n\nFound ${jobCount} jobs near you:\n\n${matchResult.message}`,
+                  zh: `好的！\n姓名：${updatedUser.full_name}\n年龄：${updatedUser.age}\n性别：${updatedUser.gender === 'male' ? '男' : '女'}\n\n好的${firstName}，让我找找...\n\n找到${jobCount}个附近的工作：\n\n${matchResult.message}`
+                })
+              : `Ok noted!\nNama: ${updatedUser.full_name}\nUmur: ${updatedUser.age}\n\n${matchResult.message}`
             break
           } else {
             // Geocoding failed - ask for more specific location but KEEP user's info
@@ -1189,18 +1189,18 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
 
           const matchResult = await findAndPresentJobsConversational(updatedUser)
           updatedUser.onboarding_status = 'matching'
-          updatedUser.conversation_state = {
-            matched_jobs: matchResult.jobs,
-            current_job_index: 0
-          }
+          updatedUser.conversation_state = buildPostSearchState(matchResult)
           nextStep = 'viewing_jobs'
 
           const firstName = updatedUser.full_name?.split(' ')[0] || ''
-          response = getText(lang, {
-            ms: `Ok ${firstName}, jap ye Kak Ani carikan kerja dekat ${locationExtracted.city || locationExtracted.state}...\n\nNi ${matchResult.jobs.length} kerja dekat dengan adik:\n\n${matchResult.message}`,
-            en: `Ok ${firstName}, let me find jobs near ${locationExtracted.city || locationExtracted.state}...\n\nFound ${matchResult.jobs.length} jobs near you:\n\n${matchResult.message}`,
-            zh: `好的${firstName}，让我找找${locationExtracted.city || locationExtracted.state}附近的工作...\n\n找到${matchResult.jobs.length}个附近的工作：\n\n${matchResult.message}`
-          })
+          const jobCount = matchResult.jobs.length
+          response = jobCount > 0
+            ? getText(lang, {
+                ms: `Ok ${firstName}, jap ye Kak Ani carikan kerja dekat ${locationExtracted.city || locationExtracted.state}...\n\nNi ${jobCount} kerja dekat dengan adik:\n\n${matchResult.message}`,
+                en: `Ok ${firstName}, let me find jobs near ${locationExtracted.city || locationExtracted.state}...\n\nFound ${jobCount} jobs near you:\n\n${matchResult.message}`,
+                zh: `好的${firstName}，让我找找${locationExtracted.city || locationExtracted.state}附近的工作...\n\n找到${jobCount}个附近的工作：\n\n${matchResult.message}`
+              })
+            : matchResult.message
           break
         } else {
           // Still can't geocode - ask again
@@ -1273,20 +1273,20 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
 
           // Set status to 'matching' BEFORE database update
           updatedUser.onboarding_status = 'matching'
-          updatedUser.conversation_state = {
-            matched_jobs: matchResult.jobs,
-            current_job_index: 0
-          }
+          updatedUser.conversation_state = buildPostSearchState(matchResult)
           nextStep = 'viewing_jobs'
 
           console.log('📝 collect_info: Setting status to matching, jobs:', matchResult.jobs.length)
 
           const firstName = updatedUser.full_name?.split(' ')[0] || ''
-          response = getText(lang, {
-            ms: `Okay ${firstName}, jap ye Kak Ani carikan...\n\nNi ${matchResult.jobs.length} kerja dekat dengan adik:\n\n${matchResult.message}`,
-            en: `Alright ${firstName}, let me check...\n\nFound ${matchResult.jobs.length} jobs near you:\n\n${matchResult.message}`,
-            zh: `好的${firstName}，让我找找...\n\n找到${matchResult.jobs.length}个附近的工作：\n\n${matchResult.message}`
-          })
+          const jobCount = matchResult.jobs.length
+          response = jobCount > 0
+            ? getText(lang, {
+                ms: `Okay ${firstName}, jap ye Kak Ani carikan...\n\nNi ${jobCount} kerja dekat dengan adik:\n\n${matchResult.message}`,
+                en: `Alright ${firstName}, let me check...\n\nFound ${jobCount} jobs near you:\n\n${matchResult.message}`,
+                zh: `好的${firstName}，让我找找...\n\n找到${jobCount}个附近的工作：\n\n${matchResult.message}`
+              })
+            : matchResult.message
         }
       } else {
         // Still missing some info - ask for it
@@ -1322,18 +1322,18 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
             // Now find jobs
             const matchResult = await findAndPresentJobsConversational(updatedUser)
             updatedUser.onboarding_status = 'matching'
-            updatedUser.conversation_state = {
-              matched_jobs: matchResult.jobs,
-              current_job_index: 0
-            }
+            updatedUser.conversation_state = buildPostSearchState(matchResult)
             nextStep = 'viewing_jobs'
 
             const firstName = updatedUser.full_name?.split(' ')[0] || ''
-            response = getText(lang, {
-              ms: `Ok ${firstName}, lokasi dah dikemaskini!\n\nNi ${matchResult.jobs.length} kerja dekat dengan adik:\n\n${matchResult.message}`,
-              en: `Ok ${firstName}, location updated!\n\nFound ${matchResult.jobs.length} jobs near you:\n\n${matchResult.message}`,
-              zh: `好的${firstName}，位置已更新！\n\n找到${matchResult.jobs.length}个附近的工作：\n\n${matchResult.message}`
-            })
+            const jobCount = matchResult.jobs.length
+            response = jobCount > 0
+              ? getText(lang, {
+                  ms: `Ok ${firstName}, lokasi dah dikemaskini!\n\nNi ${jobCount} kerja dekat dengan adik:\n\n${matchResult.message}`,
+                  en: `Ok ${firstName}, location updated!\n\nFound ${jobCount} jobs near you:\n\n${matchResult.message}`,
+                  zh: `好的${firstName}，位置已更新！\n\n找到${jobCount}个附近的工作：\n\n${matchResult.message}`
+                })
+              : matchResult.message
             break
           } else {
             // Geocoding failed for chosen state - ask for more specific location
@@ -1389,18 +1389,18 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
 
           const matchResult = await findAndPresentJobsConversational(updatedUser)
           updatedUser.onboarding_status = 'matching'
-          updatedUser.conversation_state = {
-            matched_jobs: matchResult.jobs,
-            current_job_index: 0
-          }
+          updatedUser.conversation_state = buildPostSearchState(matchResult)
           nextStep = 'viewing_jobs'
 
           const firstName = updatedUser.full_name?.split(' ')[0] || ''
-          response = getText(lang, {
-            ms: `Ok ${firstName}, lokasi dah dikemaskini ke ${locationOnly.city || locationOnly.state}!\n\nNi ${matchResult.jobs.length} kerja dekat dengan adik:\n\n${matchResult.message}`,
-            en: `Ok ${firstName}, location updated to ${locationOnly.city || locationOnly.state}!\n\nFound ${matchResult.jobs.length} jobs near you:\n\n${matchResult.message}`,
-            zh: `好的${firstName}，位置已更新为${locationOnly.city || locationOnly.state}！\n\n找到${matchResult.jobs.length}个附近的工作：\n\n${matchResult.message}`
-          })
+          const jobCount = matchResult.jobs.length
+          response = jobCount > 0
+            ? getText(lang, {
+                ms: `Ok ${firstName}, lokasi dah dikemaskini ke ${locationOnly.city || locationOnly.state}!\n\nNi ${jobCount} kerja dekat dengan adik:\n\n${matchResult.message}`,
+                en: `Ok ${firstName}, location updated to ${locationOnly.city || locationOnly.state}!\n\nFound ${jobCount} jobs near you:\n\n${matchResult.message}`,
+                zh: `好的${firstName}，位置已更新为${locationOnly.city || locationOnly.state}！\n\n找到${jobCount}个附近的工作：\n\n${matchResult.message}`
+              })
+            : matchResult.message
           break
         } else {
           // Still can't geocode
@@ -1455,18 +1455,18 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
           const matchResult = await findAndPresentJobsConversational(updatedUser)
 
           updatedUser.onboarding_status = 'matching'
-          updatedUser.conversation_state = {
-            matched_jobs: matchResult.jobs,
-            current_job_index: 0
-          }
+          updatedUser.conversation_state = buildPostSearchState(matchResult)
           nextStep = 'viewing_jobs'
 
           const firstName = updatedUser.full_name?.split(' ')[0] || ''
-          response = getText(lang, {
-            ms: `Ok ${firstName}, lokasi dah dikemaskini!\n\nNi ${matchResult.jobs.length} kerja dekat dengan adik:\n\n${matchResult.message}`,
-            en: `Ok ${firstName}, location updated!\n\nFound ${matchResult.jobs.length} jobs near you:\n\n${matchResult.message}`,
-            zh: `好的${firstName}，位置已更新！\n\n找到${matchResult.jobs.length}个附近的工作：\n\n${matchResult.message}`
-          })
+          const jobCount = matchResult.jobs.length
+          response = jobCount > 0
+            ? getText(lang, {
+                ms: `Ok ${firstName}, lokasi dah dikemaskini!\n\nNi ${jobCount} kerja dekat dengan adik:\n\n${matchResult.message}`,
+                en: `Ok ${firstName}, location updated!\n\nFound ${jobCount} jobs near you:\n\n${matchResult.message}`,
+                zh: `好的${firstName}，位置已更新！\n\n找到${jobCount}个附近的工作：\n\n${matchResult.message}`
+              })
+            : matchResult.message
         } else {
           // Got location text but no coordinates - ask for clarification
           // DON'T save incomplete location to DB - clear it until user provides geocodable location
@@ -2111,20 +2111,20 @@ async function handleCompletedUserConversational(
     const updatedUser = {
       ...user,
       onboarding_status: 'matching',
-      conversation_state: {
-        matched_jobs: result.jobs,
-        current_job_index: 0
-      }
+      conversation_state: buildPostSearchState(result)
     }
 
     await updateUserInDB(user.id, updatedUser, 'viewing_jobs')
 
+    const jobCount = result.jobs.length
     return {
-      response: getText(lang, {
-        ms: `Jumpa ${result.jobs.length} kerja sesuai!\n\n${result.message}`,
-        en: `Found ${result.jobs.length} matching jobs!\n\n${result.message}`,
-        zh: `找到${result.jobs.length}个合适的工作！\n\n${result.message}`
-      }),
+      response: jobCount > 0
+        ? getText(lang, {
+            ms: `Jumpa ${jobCount} kerja sesuai!\n\n${result.message}`,
+            en: `Found ${jobCount} matching jobs!\n\n${result.message}`,
+            zh: `找到${jobCount}个合适的工作！\n\n${result.message}`
+          })
+        : result.message,
       updatedUser
     }
   }
@@ -2154,6 +2154,77 @@ async function handleMatchingConversational(
   const currentIndex = convState.current_job_index || 0
 
   console.log(`🎯 Jobs in state: ${matchedJobs.length}, currentIndex: ${currentIndex}`)
+
+  // ===== EXPAND SEARCH HANDLER =====
+  if (convState.expand_search_pending) {
+    const lower = message.toLowerCase().trim()
+    const isYes = /^(ya|yes|ok|okay|1|是|boleh|nak|want|yep|yup|sure)$/i.test(lower)
+    const isNo = /^(tidak|tak|no|2|不|不是|nope|nah|taknak|don't)$/i.test(lower)
+
+    if (isYes) {
+      const currentRadius = convState.current_radius || 10
+      const nextRadius = currentRadius < 20 ? 20 : 50
+      console.log(`🔍 Expanding search from ${currentRadius}km to ${nextRadius}km`)
+
+      // Re-search at the new radius
+      const expandResult = await findAndPresentJobsConversational(user, nextRadius)
+
+      if (expandResult.jobs.length > 0) {
+        // Found jobs at expanded radius
+        const newState = {
+          matched_jobs: expandResult.jobs,
+          current_job_index: 0
+        }
+        await supabase.from('applicants').update({
+          conversation_state: newState,
+          updated_at: new Date().toISOString()
+        }).eq('id', user.id)
+
+        const firstName = user.full_name?.split(' ')[0] || ''
+        const resp = getText(lang, {
+          ms: `Jumpa ${expandResult.jobs.length} kerja dalam radius ${nextRadius}km!\n\n${expandResult.message}`,
+          en: `Found ${expandResult.jobs.length} jobs within ${nextRadius}km!\n\n${expandResult.message}`,
+          zh: `在${nextRadius}公里内找到${expandResult.jobs.length}个工作！\n\n${expandResult.message}`
+        })
+        return { response: resp, updatedUser: { ...user, conversation_state: newState } }
+      } else if (expandResult.noJobsAtRadius && nextRadius < 50) {
+        // Still no jobs, ask to expand further
+        const newState = {
+          expand_search_pending: true,
+          current_radius: nextRadius,
+          scored_jobs: expandResult.allScoredJobs || convState.scored_jobs || []
+        }
+        await supabase.from('applicants').update({
+          conversation_state: newState,
+          updated_at: new Date().toISOString()
+        }).eq('id', user.id)
+        return { response: expandResult.message, updatedUser: { ...user, conversation_state: newState } }
+      } else {
+        // Final tier or 50km with no jobs
+        await supabase.from('applicants').update({
+          conversation_state: {},
+          onboarding_status: 'completed',
+          updated_at: new Date().toISOString()
+        }).eq('id', user.id)
+        return { response: expandResult.message, updatedUser: { ...user, onboarding_status: 'completed', conversation_state: {} } }
+      }
+    } else if (isNo) {
+      // User declined expansion
+      await supabase.from('applicants').update({
+        conversation_state: {},
+        onboarding_status: 'completed',
+        updated_at: new Date().toISOString()
+      }).eq('id', user.id)
+
+      const resp = getText(lang, {
+        ms: `Ok takpe. Balas 'semula' bila nak cari kerja kat lokasi lain ye.`,
+        en: `No problem. Reply 'restart' when you want to search in a different location.`,
+        zh: `没关系。回复"重新开始"可以搜索其他位置。`
+      })
+      return { response: resp, updatedUser: { ...user, onboarding_status: 'completed', conversation_state: {} } }
+    }
+    // If neither yes nor no, fall through to normal handling
+  }
 
   // Handle edge case: no jobs in state (user may have arrived here incorrectly)
   if (matchedJobs.length === 0) {
@@ -2356,7 +2427,7 @@ If you cannot determine the location, return: {"lat": null, "lng": null}`
 // ============================================
 // JOB MATCHING - SIMPLIFIED
 // ============================================
-async function findAndPresentJobsConversational(user: User): Promise<{ message: string, jobs: MatchedJob[] }> {
+async function findAndPresentJobsConversational(user: User, radiusKm: number = 10): Promise<{ message: string, jobs: MatchedJob[], noJobsAtRadius?: number, allScoredJobs?: Array<{ jobId: string, distance: number }> }> {
   const lang = user.preferred_language || 'ms'
 
   // Check if user needs geocoding (has location but no coordinates)
@@ -2419,44 +2490,67 @@ async function findAndPresentJobsConversational(user: User): Promise<{ message: 
   const availableJobs = allJobs
 
   // ============================================
-  // DISTANCE-BASED JOB MATCHING (10km radius filter)
+  // DISTANCE-BASED JOB MATCHING (radius filter)
   // ============================================
-  const MAX_RADIUS_KM = 10 // Only show jobs within 10km of user's location
-
   const scoredJobs = availableJobs.map(job => {
     let distance = Infinity
 
-    // Calculate distance - requires BOTH user AND job to have coordinates
     if (user.latitude && user.longitude && job.latitude && job.longitude) {
-      // Both have valid coordinates - calculate real distance
       distance = calculateDistance(user.latitude, user.longitude, job.latitude, job.longitude)
     } else if (job.location_city) {
-      // Fallback to text-based matching (job has city but missing coordinates)
       if (user.location_city && job.location_city?.toLowerCase() === user.location_city.toLowerCase()) {
-        distance = 0 // Same city = treat as 0km (within radius)
+        distance = 0
       } else if (user.location_state && job.location_state?.toLowerCase() === user.location_state.toLowerCase()) {
-        distance = 50 // Same state but different city = ~50km (outside radius, won't show)
+        distance = 50
       } else {
-        distance = 500 // Different state = far (won't show)
+        distance = 500
       }
     }
-    // Jobs without location_city stay at Infinity (won't show)
 
     return { job, distance }
   })
 
-  // Filter to only jobs within 10km radius, then sort and take top 20
-  const nearbyJobs = scoredJobs.filter(s => s.distance <= MAX_RADIUS_KM)
-  console.log(`📍 Jobs within ${MAX_RADIUS_KM}km: ${nearbyJobs.length} of ${scoredJobs.length} total`)
+  // Build lightweight scored jobs array for state storage (only finite distances)
+  const allScoredJobs = scoredJobs
+    .filter(s => s.distance < Infinity)
+    .map(s => ({ jobId: s.job.id, distance: Math.round(s.distance * 10) / 10 }))
 
-  // If no jobs within radius, inform user
+  // Filter to only jobs within the given radius
+  const nearbyJobs = scoredJobs.filter(s => s.distance <= radiusKm)
+  console.log(`📍 Jobs within ${radiusKm}km: ${nearbyJobs.length} of ${scoredJobs.length} total`)
+
+  // If no jobs within radius, return with expansion info
   if (nearbyJobs.length === 0) {
     const locationText = [user.location_city, user.location_state].filter(Boolean).join(', ')
+    const nextRadius = radiusKm < 20 ? 20 : radiusKm < 50 ? 50 : null
+
+    if (nextRadius) {
+      const askExpandMessage = radiusKm < 20
+        ? getText(lang, {
+            ms: `Maaf, tiada kerja dalam radius ${radiusKm}km dari ${locationText}.\n\nNak Kak Ani cari dalam radius ${nextRadius}km?\n\nBalas 'ya' atau 'tidak'.`,
+            en: `Sorry, no jobs within ${radiusKm}km of ${locationText}.\n\nWould you like to expand the search to ${nextRadius}km?\n\nReply 'yes' or 'no'.`,
+            zh: `抱歉，${locationText}${radiusKm}公里范围内没有工作。\n\n要扩大到${nextRadius}公里搜索吗？\n\n回复"是"或"不是"。`
+          })
+        : getText(lang, {
+            ms: `Masih takde kerja dalam ${radiusKm}km. Nak cuba cari dalam ${nextRadius}km?\n\nBalas 'ya' atau 'tidak'.`,
+            en: `Still no jobs within ${radiusKm}km. Want to try ${nextRadius}km?\n\nReply 'yes' or 'no'.`,
+            zh: `${radiusKm}公里内还是没有工作。要试试${nextRadius}公里吗？\n\n回复"是"或"不是"。`
+          })
+
+      return {
+        message: askExpandMessage,
+        jobs: [],
+        noJobsAtRadius: radiusKm,
+        allScoredJobs
+      }
+    }
+
+    // Final tier - no more expansion
     return {
       message: getText(lang, {
-        ms: `Maaf, tiada kerja kosong dalam radius 10km dari ${locationText} buat masa ini.\n\nTip: Cuba masukkan lokasi lain dengan balas "semula".`,
-en: `Sorry, no job vacancies within 10km of ${locationText} at the moment.\n\nTip: Try entering a different location by replying "restart".`,
-        zh: `抱歉，${locationText}10公里范围内目前没有职位空缺。\n\n提示：回复"重新"尝试输入其他位置。`
+        ms: `Maaf, tiada kerja dalam ${radiusKm}km dari ${locationText}.\n\nTip: Balas 'semula' untuk cari lokasi lain.`,
+        en: `Sorry, no jobs within ${radiusKm}km of ${locationText}.\n\nTip: Reply 'restart' to try a different location.`,
+        zh: `抱歉，${locationText}${radiusKm}公里内没有工作。\n\n提示：回复"重新开始"尝试其他位置。`
       }),
       jobs: []
     }
@@ -2479,6 +2573,23 @@ en: `Sorry, no job vacancies within 10km of ${locationText} at the moment.\n\nTi
   const message = formatJobsMessage(topJobs, 0, lang)
 
   return { message, jobs: topJobs }
+}
+
+// ============================================
+// HELPER: Build conversation state after job search
+// ============================================
+function buildPostSearchState(matchResult: { jobs: MatchedJob[], noJobsAtRadius?: number, allScoredJobs?: Array<{ jobId: string, distance: number }> }): Record<string, any> {
+  if (matchResult.noJobsAtRadius) {
+    return {
+      expand_search_pending: true,
+      current_radius: matchResult.noJobsAtRadius,
+      scored_jobs: matchResult.allScoredJobs || []
+    }
+  }
+  return {
+    matched_jobs: matchResult.jobs,
+    current_job_index: 0
+  }
 }
 
 // ============================================
