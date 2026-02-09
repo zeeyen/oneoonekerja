@@ -36,6 +36,8 @@ import {
   XCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { useAdmin } from '@/contexts/AdminContext';
+import { maskIcNumber } from '@/lib/maskSensitiveData';
 
 const languageLabels: Record<string, string> = {
   ms: 'Bahasa Malaysia',
@@ -50,6 +52,7 @@ const jobTypeLabels: Record<string, string> = {
 
 export default function ApplicantDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { isAdmin } = useAdmin();
   const navigate = useNavigate();
 
   const { data: applicant, isLoading: applicantLoading } = useApplicantDetail(id!);
@@ -146,7 +149,7 @@ export default function ApplicantDetailPage() {
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-muted-foreground">IC Number</label>
-                <p className="mt-1 font-mono">{applicant.ic_number || '-'}</p>
+                <p className="mt-1 font-mono">{maskIcNumber(applicant.ic_number, isAdmin)}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Age</label>
