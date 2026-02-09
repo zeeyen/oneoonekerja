@@ -89,7 +89,7 @@ export default function SettingsPage() {
     setExportingApplicants(true);
     try {
       const applicants = await fetchAllApplicantsForExport();
-      exportApplicantsToCSV(applicants);
+      exportApplicantsToCSV(applicants, isAdmin);
       toast({ title: 'Success', description: `Exported ${applicants.length} applicants.` });
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to export applicants.', variant: 'destructive' });

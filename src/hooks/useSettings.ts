@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { AdminUser, Applicant, Job } from '@/types/database';
 import { startOfMonth, endOfMonth, format } from 'date-fns';
+import { maskIcNumber } from '@/lib/maskSensitiveData';
 
 // Fetch all admin users
 async function fetchAdminUsers(): Promise<AdminUser[]> {
@@ -150,7 +151,7 @@ async function fetchAllJobsForExport(): Promise<Job[]> {
 }
 
 // Export functions
-export function exportApplicantsToCSV(applicants: Applicant[]): void {
+export function exportApplicantsToCSV(applicants: Applicant[], isAdmin: boolean = false): void {
   const headers = [
     'ID', 'Phone', 'IC', 'Name', 'Age', 'Gender', 'Language',
     'City', 'State', 'Postcode', 'Job Types', 'Positions',
@@ -160,7 +161,7 @@ export function exportApplicantsToCSV(applicants: Applicant[]): void {
   const rows = applicants.map((a) => [
     a.id,
     a.phone_number,
-    a.ic_number || '',
+    maskIcNumber(a.ic_number, isAdmin),
     a.full_name || '',
     a.age || '',
     a.gender || '',
