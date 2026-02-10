@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Briefcase, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
+import logo from '@/assets/101kerja-logo.jpg';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -39,9 +40,7 @@ export default function Login() {
       <div className="w-full max-w-md animate-fade-in">
         {/* Logo and branding */}
         <div className="flex flex-col items-center mb-8">
-          <div className="flex items-center justify-center w-14 h-14 rounded-xl bg-primary text-primary-foreground mb-4">
-            <Briefcase className="h-7 w-7" />
-          </div>
+          <img src={logo} alt="101Kerja Logo" className="h-14 w-14 object-contain mb-4" />
           <h1 className="text-2xl font-semibold text-foreground">101Kerja Admin</h1>
           <p className="text-muted-foreground mt-1">WhatsApp Job Matching Platform</p>
         </div>
