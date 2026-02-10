@@ -536,6 +536,14 @@ serve(async (req) => {
       return jsonResponse(result)
     }
 
+    // Check for shortcode commands (geo-xxxx / com-xxxx)
+    const shortcode = detectShortcode(message)
+    if (shortcode) {
+      console.log(`🔗 Shortcode detected: ${shortcode.type}-${shortcode.slug}`)
+      const result = await handleShortcodeSearch(user, shortcode.type, shortcode.slug)
+      return jsonResponse(result)
+    }
+
     // Process with Kak Ani
     const result = await processWithKakAni(user, message, messageType, locationData)
 
