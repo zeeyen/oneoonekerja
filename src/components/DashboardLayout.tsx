@@ -37,6 +37,7 @@ import {
   Shield,
   UserCog,
 } from 'lucide-react';
+import logo from '@/assets/101kerja-logo.jpg';
 
 function AppSidebar() {
   const location = useLocation();
