@@ -718,16 +718,8 @@ function detectShortcode(message: string): { type: 'geo' | 'com', slug: string }
 }
 
 function expandSlug(slug: string): string {
-  // Known abbreviation prefixes (order matters - longer first)
-  const abbreviations: Record<string, string> = {
-    'sg': 'sungai',
-    'bt': 'batu',
-    'jln': 'jalan',
-    'tmn': 'taman',
-    'bdr': 'bandar',
-    'bndr': 'bandar',
-    'kpg': 'kampung',
-    'kg': 'kampung',
+  // Full-word abbreviation replacements (when slug IS the abbreviation)
+  const fullWordMap: Record<string, string> = {
     'pj': 'petaling jaya',
     'jb': 'johor bahru',
     'kl': 'kuala lumpur',
@@ -737,30 +729,45 @@ function expandSlug(slug: string): string {
     'pd': 'port dickson',
     'bm': 'bukit mertajam',
     'sp': 'sungai petani',
-    'tj': 'tanjung',
-    'ulu': 'ulu',
-    'sri': 'sri',
-    'air': 'air',
   }
 
-  // Sort abbreviations by length (longest first) to avoid partial matches
-  const sortedAbbrevs = Object.entries(abbreviations).sort((a, b) => b[0].length - a[0].length)
+  // If the entire slug is a known abbreviation, expand it
+  if (fullWordMap[slug]) {
+    return fullWordMap[slug]
+  }
+
+  // Prefix abbreviations - only match when followed by a clear word boundary
+  // These are abbreviations that commonly prefix place names
+  const prefixAbbrevs: Array<[string, string]> = [
+    ['bndr', 'bandar'],
+    ['bdr', 'bandar'],
+    ['tmn', 'taman'],
+    ['jln', 'jalan'],
+    ['kpg', 'kampung'],
+    ['sg', 'sungai'],
+    ['bt', 'batu'],
+    ['kg', 'kampung'],
+    ['tj', 'tanjung'],
+  ]
+
+  // Sort by length (longest first)
+  prefixAbbrevs.sort((a, b) => b[0].length - a[0].length)
 
   let expanded = slug
 
-  // Try to split known abbreviation prefixes from the rest of the slug
-  for (const [abbr, full] of sortedAbbrevs) {
+  for (const [abbr, full] of prefixAbbrevs) {
     if (expanded.startsWith(abbr) && expanded.length > abbr.length) {
       const rest = expanded.slice(abbr.length)
-      // Recursively expand the rest
-      expanded = full + ' ' + rest
-      break
+      // Only split if the remainder looks like a separate word
+      // (i.e., not a natural continuation like "klang" after "k")
+      // Heuristic: abbreviation must be at least 2 chars and the rest should be >= 3 chars
+      if (abbr.length >= 2 && rest.length >= 2) {
+        expanded = full + ' ' + rest
+        break
+      }
     }
   }
 
-  // Insert spaces between words that are run together (camelCase-like detection for lowercase)
-  // This handles cases like "yongpeng" which should stay as-is (it's a real place name)
-  
   return expanded.trim()
 }
 
