@@ -513,6 +513,14 @@ serve(async (req) => {
       })
     }
 
+    // Check for shortcode commands (geo-xxxx / com-xxxx) - BEFORE session timeout
+    const shortcode = detectShortcode(message)
+    if (shortcode) {
+      console.log(`🔗 Shortcode detected: ${shortcode.type}-${shortcode.slug}`)
+      const result = await handleShortcodeSearch(user, shortcode.type, shortcode.slug)
+      return jsonResponse(result)
+    }
+
     // Check if user is responding to session expired prompt (BEFORE timeout check)
     // This handles the case where user replies "1" or "2" to the menu
     const convState = user.conversation_state || {}
@@ -533,14 +541,6 @@ serve(async (req) => {
     const sessionExpired = checkSessionTimeout(user)
     if (sessionExpired && user.full_name) {
       const result = await handleSessionExpired(user, message)
-      return jsonResponse(result)
-    }
-
-    // Check for shortcode commands (geo-xxxx / com-xxxx)
-    const shortcode = detectShortcode(message)
-    if (shortcode) {
-      console.log(`🔗 Shortcode detected: ${shortcode.type}-${shortcode.slug}`)
-      const result = await handleShortcodeSearch(user, shortcode.type, shortcode.slug)
       return jsonResponse(result)
     }
 
