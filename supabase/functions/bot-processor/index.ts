@@ -701,6 +701,180 @@ function detectCustomerServiceIntent(message: string): boolean {
 }
 
 // ============================================
+// SHORTCODE DETECTION (geo-xxxx / com-xxxx)
+// ============================================
+function detectShortcode(message: string): { type: 'geo' | 'com', slug: string } | null {
+  const match = message.trim().match(/^(geo|com)-(.+)$/i)
+  if (!match) return null
+  return { type: match[1].toLowerCase() as 'geo' | 'com', slug: match[2].toLowerCase() }
+}
+
+function expandSlug(slug: string): string {
+  // Known abbreviation prefixes (order matters - longer first)
+  const abbreviations: Record<string, string> = {
+    'sg': 'sungai',
+    'bt': 'batu',
+    'jln': 'jalan',
+    'tmn': 'taman',
+    'bdr': 'bandar',
+    'bndr': 'bandar',
+    'kpg': 'kampung',
+    'kg': 'kampung',
+    'pj': 'petaling jaya',
+    'jb': 'johor bahru',
+    'kl': 'kuala lumpur',
+    'kk': 'kota kinabalu',
+    'kb': 'kota bharu',
+    'sa': 'shah alam',
+    'pd': 'port dickson',
+    'bm': 'bukit mertajam',
+    'sp': 'sungai petani',
+    'tj': 'tanjung',
+    'ulu': 'ulu',
+    'sri': 'sri',
+    'air': 'air',
+  }
+
+  // Sort abbreviations by length (longest first) to avoid partial matches
+  const sortedAbbrevs = Object.entries(abbreviations).sort((a, b) => b[0].length - a[0].length)
+
+  let expanded = slug
+
+  // Try to split known abbreviation prefixes from the rest of the slug
+  for (const [abbr, full] of sortedAbbrevs) {
+    if (expanded.startsWith(abbr) && expanded.length > abbr.length) {
+      const rest = expanded.slice(abbr.length)
+      // Recursively expand the rest
+      expanded = full + ' ' + rest
+      break
+    }
+  }
+
+  // Insert spaces between words that are run together (camelCase-like detection for lowercase)
+  // This handles cases like "yongpeng" which should stay as-is (it's a real place name)
+  
+  return expanded.trim()
+}
+
+function buildIlikePattern(searchTerm: string): string {
+  // Split into words and join with % for fuzzy ILIKE matching
+  const words = searchTerm.split(/\s+/).filter(w => w.length > 0)
+  return `%${words.join('%')}%`
+}
+
+async function handleShortcodeSearch(
+  user: User,
+  type: 'geo' | 'com',
+  slug: string
+): Promise<{ response: string, updatedUser: User }> {
+  const lang = 'ms' // Default to Malay for first message
+  const expanded = expandSlug(slug)
+  const pattern = buildIlikePattern(expanded)
+  
+  console.log(`🔗 Shortcode: ${type}-${slug} → expanded: "${expanded}" → pattern: "${pattern}"`)
+
+  const today = new Date().toISOString().split('T')[0]
+
+  let query = supabase
+    .from('jobs')
+    .select('*')
+    .gte('expire_by', today)
+
+  if (type === 'geo') {
+    // Search location_city, location_address, location_state
+    query = query.or(`location_city.ilike.${pattern},location_address.ilike.${pattern},location_state.ilike.${pattern}`)
+  } else {
+    // Search company
+    query = query.or(`company.ilike.${pattern}`)
+  }
+
+  const { data: jobs, error } = await query.limit(20)
+
+  if (error) {
+    console.error('Shortcode search error:', error)
+    return {
+      response: 'Alamak ada masalah teknikal. Cuba hantar mesej sekali lagi ye?',
+      updatedUser: user
+    }
+  }
+
+  if (!jobs || jobs.length === 0) {
+    console.log(`🔗 No jobs found for shortcode ${type}-${slug}`)
+    // No jobs found - fall through to normal onboarding
+    // Set user to new so they go through normal flow
+    const updatedUser: User = {
+      ...user,
+      onboarding_status: 'new',
+      conversation_state: {}
+    }
+    
+    const searchLabel = type === 'geo' ? expanded : expanded
+    const noJobsMsg = `Maaf, tiada kerja dijumpai untuk "${expanded}".\n\nTakpe, Kak Ani boleh tolong cari kerja lain!\n\nSebelum tu, adik prefer bahasa apa?\n1. Bahasa Malaysia\n2. English\n3. 中文 (Chinese)`
+
+    // Update DB to start normal onboarding
+    await supabase.from('applicants').update({
+      onboarding_status: 'in_progress',
+      onboarding_step: 'language',
+      conversation_state: {},
+      updated_at: new Date().toISOString()
+    }).eq('id', user.id)
+
+    return {
+      response: noJobsMsg,
+      updatedUser: { ...updatedUser, onboarding_status: 'in_progress', onboarding_step: 'language' }
+    }
+  }
+
+  // Format matched jobs
+  const matchedJobs: MatchedJob[] = jobs.map(job => ({
+    id: job.id,
+    title: job.title,
+    company: job.company || '101Kerja Partner',
+    location_city: job.location_city,
+    location_state: job.location_state,
+    salary_range: job.salary_range,
+    url: job.url,
+    industry: job.industry,
+    external_job_id: job.external_job_id
+  }))
+
+  const jobsMessage = formatJobsMessage(matchedJobs, 0, lang)
+
+  const searchTypeLabel = type === 'geo'
+    ? `dekat ${expanded.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`
+    : `di ${expanded.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`
+
+  const response = `Salam! Saya Kak Ani dari 101Kerja.\n\nJumpa ${matchedJobs.length} kerja ${searchTypeLabel}:\n\n${jobsMessage}\n\n━━━━━━━━━━━━━━━━━━━━\n\nUntuk mohon, Kak Ani perlukan maklumat adik:\n- Nama penuh\n- Umur\n- Lelaki/Perempuan\n- Duduk mana (bandar, negeri)\n\nContoh: "Ahmad, 25, lelaki, Shah Alam Selangor"`
+
+  // Update user state
+  const conversationState = {
+    shortcode_jobs: matchedJobs,
+    shortcode_type: type,
+    current_job_index: 0
+  }
+
+  const updatedUser: User = {
+    ...user,
+    onboarding_status: 'in_progress',
+    onboarding_step: 'collect_info',
+    preferred_language: 'ms',
+    conversation_state: conversationState
+  }
+
+  await supabase.from('applicants').update({
+    onboarding_status: 'in_progress',
+    onboarding_step: 'collect_info',
+    preferred_language: 'ms',
+    conversation_state: conversationState,
+    updated_at: new Date().toISOString()
+  }).eq('id', user.id)
+
+  console.log(`🔗 Shortcode: Found ${matchedJobs.length} jobs, set to collect_info with shortcode_jobs`)
+
+  return { response, updatedUser }
+}
+
+// ============================================
 // DETECT LANGUAGE CHANGE COMMAND
 // ============================================
 function detectLanguageChangeCommand(message: string): string | null {
