@@ -816,7 +816,6 @@ async function handleShortcodeSearch(
   if (!jobs || jobs.length === 0) {
     console.log(`🔗 No jobs found for shortcode ${type}-${slug}`)
     const hasProfile = user.full_name && user.age && user.gender
-    const hasProfile = user.full_name && user.age && user.gender
 
     if (hasProfile) {
       // Returning user - just tell them no jobs found, offer restart
