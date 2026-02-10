@@ -815,28 +815,33 @@ async function handleShortcodeSearch(
 
   if (!jobs || jobs.length === 0) {
     console.log(`🔗 No jobs found for shortcode ${type}-${slug}`)
-    // No jobs found - fall through to normal onboarding
-    // Set user to new so they go through normal flow
-    const updatedUser: User = {
-      ...user,
-      onboarding_status: 'new',
-      conversation_state: {}
-    }
-    
-    const searchLabel = type === 'geo' ? expanded : expanded
-    const noJobsMsg = `Maaf, tiada kerja dijumpai untuk "${expanded}".\n\nTakpe, Kak Ani boleh tolong cari kerja lain!\n\nSebelum tu, adik prefer bahasa apa?\n1. Bahasa Malaysia\n2. English\n3. 中文 (Chinese)`
+    const lang = user.preferred_language || 'ms'
+    const hasProfile = user.full_name && user.age && user.gender
 
-    // Update DB to start normal onboarding
-    await supabase.from('applicants').update({
-      onboarding_status: 'in_progress',
-      onboarding_step: 'language',
-      conversation_state: {},
-      updated_at: new Date().toISOString()
-    }).eq('id', user.id)
+    if (hasProfile) {
+      // Returning user - just tell them no jobs found, offer restart
+      const firstName = user.full_name?.split(' ')[0] || ''
+      const noJobsMsg = getText(lang, {
+        ms: `Maaf ${firstName}, tiada kerja dijumpai untuk "${expanded}".\n\nBalas 'semula' untuk cari kerja lain.`,
+        en: `Sorry ${firstName}, no jobs found for "${expanded}".\n\nReply 'restart' to search for other jobs.`,
+        zh: `抱歉${firstName}，没有找到"${expanded}"的工作。\n\n回复「重新开始」搜索其他工作。`
+      })
+      return { response: noJobsMsg, updatedUser: user }
+    } else {
+      // New user - fall through to normal onboarding
+      const noJobsMsg = `Maaf, tiada kerja dijumpai untuk "${expanded}".\n\nTakpe, Kak Ani boleh tolong cari kerja lain!\n\nSebelum tu, adik prefer bahasa apa?\n1. Bahasa Malaysia\n2. English\n3. 中文 (Chinese)`
 
-    return {
-      response: noJobsMsg,
-      updatedUser: { ...updatedUser, onboarding_status: 'in_progress', onboarding_step: 'language' }
+      await supabase.from('applicants').update({
+        onboarding_status: 'in_progress',
+        onboarding_step: 'language',
+        conversation_state: {},
+        updated_at: new Date().toISOString()
+      }).eq('id', user.id)
+
+      return {
+        response: noJobsMsg,
+        updatedUser: { ...user, onboarding_status: 'in_progress', onboarding_step: 'language', conversation_state: {} }
+      }
     }
   }
 
@@ -853,15 +858,59 @@ async function handleShortcodeSearch(
     external_job_id: job.external_job_id
   }))
 
+  // Check if user is a returning user with complete profile
+  const hasProfile = user.full_name && user.age && user.gender
+  const lang = user.preferred_language || 'ms'
   const jobsMessage = formatJobsMessage(matchedJobs, 0, lang)
 
   const searchTypeLabel = type === 'geo'
-    ? `dekat ${expanded.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`
-    : `di ${expanded.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`
+    ? getText(lang, {
+        ms: `dekat ${expanded.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`,
+        en: `near ${expanded.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`,
+        zh: `在${expanded.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}附近`
+      })
+    : getText(lang, {
+        ms: `di ${expanded.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`,
+        en: `at ${expanded.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`,
+        zh: `在${expanded.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`
+      })
 
+  if (hasProfile) {
+    // Returning user - go straight to matching, let them pick jobs
+    console.log(`🔗 Returning user with profile, going straight to matching`)
+
+    const conversationState = {
+      matched_jobs: matchedJobs,
+      current_job_index: 0
+    }
+
+    const firstName = user.full_name?.split(' ')[0] || ''
+    const response = getText(lang, {
+      ms: `Hai ${firstName}! Jumpa ${matchedJobs.length} kerja ${searchTypeLabel}:\n\n${jobsMessage}`,
+      en: `Hi ${firstName}! Found ${matchedJobs.length} jobs ${searchTypeLabel}:\n\n${jobsMessage}`,
+      zh: `嗨${firstName}！找到${matchedJobs.length}个工作${searchTypeLabel}：\n\n${jobsMessage}`
+    })
+
+    const updatedUser: User = {
+      ...user,
+      onboarding_status: 'matching',
+      onboarding_step: 'viewing_jobs',
+      conversation_state: conversationState
+    }
+
+    await supabase.from('applicants').update({
+      onboarding_status: 'matching',
+      onboarding_step: 'viewing_jobs',
+      conversation_state: conversationState,
+      updated_at: new Date().toISOString()
+    }).eq('id', user.id)
+
+    return { response, updatedUser }
+  }
+
+  // New user - show jobs + ask for info
   const response = `Salam! Saya Kak Ani dari 101Kerja.\n\nJumpa ${matchedJobs.length} kerja ${searchTypeLabel}:\n\n${jobsMessage}\n\n━━━━━━━━━━━━━━━━━━━━\n\nUntuk mohon, Kak Ani perlukan maklumat adik:\n- Nama penuh\n- Umur\n- Lelaki/Perempuan\n- Duduk mana (bandar, negeri)\n\nContoh: "Ahmad, 25, lelaki, Shah Alam Selangor"`
 
-  // Update user state
   const conversationState = {
     shortcode_jobs: matchedJobs,
     shortcode_type: type,
@@ -884,7 +933,7 @@ async function handleShortcodeSearch(
     updated_at: new Date().toISOString()
   }).eq('id', user.id)
 
-  console.log(`🔗 Shortcode: Found ${matchedJobs.length} jobs, set to collect_info with shortcode_jobs`)
+  console.log(`🔗 Shortcode: Found ${matchedJobs.length} jobs, new user → collect_info with shortcode_jobs`)
 
   return { response, updatedUser }
 }
