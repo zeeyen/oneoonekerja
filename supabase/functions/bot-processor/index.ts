@@ -1450,25 +1450,45 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
           // Got everything including coordinates - find jobs
           console.log('📝 collect_info: All fields complete, finding jobs...')
 
-          // Find and present jobs
-          const matchResult = await findAndPresentJobsConversational(updatedUser)
-
-          // Set status to 'matching' BEFORE database update
-          updatedUser.onboarding_status = 'matching'
-          updatedUser.conversation_state = buildPostSearchState(matchResult)
-          nextStep = 'viewing_jobs'
-
-          console.log('📝 collect_info: Setting status to matching, jobs:', matchResult.jobs.length)
-
           const firstName = updatedUser.full_name?.split(' ')[0] || ''
-          const jobCount = matchResult.jobs.length
-          response = jobCount > 0
-            ? getText(lang, {
-                ms: `Okay ${firstName}, jap ye Kak Ani carikan...\n\nNi ${jobCount} kerja dekat dengan adik:\n\n${matchResult.message}`,
-                en: `Alright ${firstName}, let me check...\n\nFound ${jobCount} jobs near you:\n\n${matchResult.message}`,
-                zh: `好的${firstName}，让我找找...\n\n找到${jobCount}个附近的工作：\n\n${matchResult.message}`
-              })
-            : matchResult.message
+
+          // Check if shortcode jobs are pre-loaded
+          const shortcodeJobs = (updatedUser.conversation_state || {}).shortcode_jobs
+          if (shortcodeJobs && shortcodeJobs.length > 0) {
+            console.log(`📝 collect_info: Using ${shortcodeJobs.length} pre-loaded shortcode jobs`)
+            
+            updatedUser.onboarding_status = 'matching'
+            updatedUser.conversation_state = {
+              matched_jobs: shortcodeJobs,
+              current_job_index: 0
+            }
+            nextStep = 'viewing_jobs'
+
+            response = getText(lang, {
+              ms: `Ok noted!\nNama: ${updatedUser.full_name}\nUmur: ${updatedUser.age}\nJantina: ${updatedUser.gender === 'male' ? 'Lelaki' : 'Perempuan'}\nLokasi: ${updatedUser.location_city || updatedUser.location_state}\n\nBoleh pilih kerja dari senarai tadi. Balas nombor untuk mohon, atau 'lagi' untuk lebih banyak.`,
+              en: `Ok noted!\nName: ${updatedUser.full_name}\nAge: ${updatedUser.age}\nGender: ${updatedUser.gender === 'male' ? 'Male' : 'Female'}\nLocation: ${updatedUser.location_city || updatedUser.location_state}\n\nYou can now select from the jobs listed earlier. Reply with a number to apply, or 'more' for more options.`,
+              zh: `好的！\n姓名：${updatedUser.full_name}\n年龄：${updatedUser.age}\n性别：${updatedUser.gender === 'male' ? '男' : '女'}\n地点：${updatedUser.location_city || updatedUser.location_state}\n\n现在可以从之前的列表中选择工作。回复数字申请，或「更多」查看更多。`
+            })
+          } else {
+            // Normal flow - find and present jobs
+            const matchResult = await findAndPresentJobsConversational(updatedUser)
+
+            // Set status to 'matching' BEFORE database update
+            updatedUser.onboarding_status = 'matching'
+            updatedUser.conversation_state = buildPostSearchState(matchResult)
+            nextStep = 'viewing_jobs'
+
+            console.log('📝 collect_info: Setting status to matching, jobs:', matchResult.jobs.length)
+
+            const jobCount = matchResult.jobs.length
+            response = jobCount > 0
+              ? getText(lang, {
+                  ms: `Okay ${firstName}, jap ye Kak Ani carikan...\n\nNi ${jobCount} kerja dekat dengan adik:\n\n${matchResult.message}`,
+                  en: `Alright ${firstName}, let me check...\n\nFound ${jobCount} jobs near you:\n\n${matchResult.message}`,
+                  zh: `好的${firstName}，让我找找...\n\n找到${jobCount}个附近的工作：\n\n${matchResult.message}`
+                })
+              : matchResult.message
+          }
         }
       } else {
         // Still missing some info - ask for it
