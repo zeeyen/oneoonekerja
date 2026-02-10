@@ -536,6 +536,14 @@ serve(async (req) => {
       return jsonResponse(result)
     }
 
+    // Check for shortcode commands (geo-xxxx / com-xxxx)
+    const shortcode = detectShortcode(message)
+    if (shortcode) {
+      console.log(`🔗 Shortcode detected: ${shortcode.type}-${shortcode.slug}`)
+      const result = await handleShortcodeSearch(user, shortcode.type, shortcode.slug)
+      return jsonResponse(result)
+    }
+
     // Process with Kak Ani
     const result = await processWithKakAni(user, message, messageType, locationData)
 
@@ -698,6 +706,187 @@ function detectCustomerServiceIntent(message: string): boolean {
     '客服', '人工', '帮助'
   ]
   return csKeywords.some(keyword => lower.includes(keyword))
+}
+
+// ============================================
+// SHORTCODE DETECTION (geo-xxxx / com-xxxx)
+// ============================================
+function detectShortcode(message: string): { type: 'geo' | 'com', slug: string } | null {
+  const match = message.trim().match(/^(geo|com)-(.+)$/i)
+  if (!match) return null
+  return { type: match[1].toLowerCase() as 'geo' | 'com', slug: match[2].toLowerCase() }
+}
+
+function expandSlug(slug: string): string {
+  // Full-word abbreviation replacements (when slug IS the abbreviation)
+  const fullWordMap: Record<string, string> = {
+    'pj': 'petaling jaya',
+    'jb': 'johor bahru',
+    'kl': 'kuala lumpur',
+    'kk': 'kota kinabalu',
+    'kb': 'kota bharu',
+    'sa': 'shah alam',
+    'pd': 'port dickson',
+    'bm': 'bukit mertajam',
+    'sp': 'sungai petani',
+  }
+
+  // If the entire slug is a known abbreviation, expand it
+  if (fullWordMap[slug]) {
+    return fullWordMap[slug]
+  }
+
+  // Prefix abbreviations - only match when followed by a clear word boundary
+  // These are abbreviations that commonly prefix place names
+  const prefixAbbrevs: Array<[string, string]> = [
+    ['bndr', 'bandar'],
+    ['bdr', 'bandar'],
+    ['tmn', 'taman'],
+    ['jln', 'jalan'],
+    ['kpg', 'kampung'],
+    ['sg', 'sungai'],
+    ['bt', 'batu'],
+    ['kg', 'kampung'],
+    ['tj', 'tanjung'],
+  ]
+
+  // Sort by length (longest first)
+  prefixAbbrevs.sort((a, b) => b[0].length - a[0].length)
+
+  let expanded = slug
+
+  for (const [abbr, full] of prefixAbbrevs) {
+    if (expanded.startsWith(abbr) && expanded.length > abbr.length) {
+      const rest = expanded.slice(abbr.length)
+      // Only split if the remainder looks like a separate word
+      // (i.e., not a natural continuation like "klang" after "k")
+      // Heuristic: abbreviation must be at least 2 chars and the rest should be >= 3 chars
+      if (abbr.length >= 2 && rest.length >= 2) {
+        expanded = full + ' ' + rest
+        break
+      }
+    }
+  }
+
+  return expanded.trim()
+}
+
+function buildIlikePattern(searchTerm: string): string {
+  // Split into words and join with % for fuzzy ILIKE matching
+  const words = searchTerm.split(/\s+/).filter(w => w.length > 0)
+  return `%${words.join('%')}%`
+}
+
+async function handleShortcodeSearch(
+  user: User,
+  type: 'geo' | 'com',
+  slug: string
+): Promise<{ response: string, updatedUser: User }> {
+  const lang = 'ms' // Default to Malay for first message
+  const expanded = expandSlug(slug)
+  const pattern = buildIlikePattern(expanded)
+  
+  console.log(`🔗 Shortcode: ${type}-${slug} → expanded: "${expanded}" → pattern: "${pattern}"`)
+
+  const today = new Date().toISOString().split('T')[0]
+
+  let query = supabase
+    .from('jobs')
+    .select('*')
+    .gte('expire_by', today)
+
+  if (type === 'geo') {
+    // Search location_city, location_address, location_state
+    query = query.or(`location_city.ilike.${pattern},location_address.ilike.${pattern},location_state.ilike.${pattern}`)
+  } else {
+    // Search company
+    query = query.or(`company.ilike.${pattern}`)
+  }
+
+  const { data: jobs, error } = await query.limit(20)
+
+  if (error) {
+    console.error('Shortcode search error:', error)
+    return {
+      response: 'Alamak ada masalah teknikal. Cuba hantar mesej sekali lagi ye?',
+      updatedUser: user
+    }
+  }
+
+  if (!jobs || jobs.length === 0) {
+    console.log(`🔗 No jobs found for shortcode ${type}-${slug}`)
+    // No jobs found - fall through to normal onboarding
+    // Set user to new so they go through normal flow
+    const updatedUser: User = {
+      ...user,
+      onboarding_status: 'new',
+      conversation_state: {}
+    }
+    
+    const searchLabel = type === 'geo' ? expanded : expanded
+    const noJobsMsg = `Maaf, tiada kerja dijumpai untuk "${expanded}".\n\nTakpe, Kak Ani boleh tolong cari kerja lain!\n\nSebelum tu, adik prefer bahasa apa?\n1. Bahasa Malaysia\n2. English\n3. 中文 (Chinese)`
+
+    // Update DB to start normal onboarding
+    await supabase.from('applicants').update({
+      onboarding_status: 'in_progress',
+      onboarding_step: 'language',
+      conversation_state: {},
+      updated_at: new Date().toISOString()
+    }).eq('id', user.id)
+
+    return {
+      response: noJobsMsg,
+      updatedUser: { ...updatedUser, onboarding_status: 'in_progress', onboarding_step: 'language' }
+    }
+  }
+
+  // Format matched jobs
+  const matchedJobs: MatchedJob[] = jobs.map(job => ({
+    id: job.id,
+    title: job.title,
+    company: job.company || '101Kerja Partner',
+    location_city: job.location_city,
+    location_state: job.location_state,
+    salary_range: job.salary_range,
+    url: job.url,
+    industry: job.industry,
+    external_job_id: job.external_job_id
+  }))
+
+  const jobsMessage = formatJobsMessage(matchedJobs, 0, lang)
+
+  const searchTypeLabel = type === 'geo'
+    ? `dekat ${expanded.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`
+    : `di ${expanded.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`
+
+  const response = `Salam! Saya Kak Ani dari 101Kerja.\n\nJumpa ${matchedJobs.length} kerja ${searchTypeLabel}:\n\n${jobsMessage}\n\n━━━━━━━━━━━━━━━━━━━━\n\nUntuk mohon, Kak Ani perlukan maklumat adik:\n- Nama penuh\n- Umur\n- Lelaki/Perempuan\n- Duduk mana (bandar, negeri)\n\nContoh: "Ahmad, 25, lelaki, Shah Alam Selangor"`
+
+  // Update user state
+  const conversationState = {
+    shortcode_jobs: matchedJobs,
+    shortcode_type: type,
+    current_job_index: 0
+  }
+
+  const updatedUser: User = {
+    ...user,
+    onboarding_status: 'in_progress',
+    onboarding_step: 'collect_info',
+    preferred_language: 'ms',
+    conversation_state: conversationState
+  }
+
+  await supabase.from('applicants').update({
+    onboarding_status: 'in_progress',
+    onboarding_step: 'collect_info',
+    preferred_language: 'ms',
+    conversation_state: conversationState,
+    updated_at: new Date().toISOString()
+  }).eq('id', user.id)
+
+  console.log(`🔗 Shortcode: Found ${matchedJobs.length} jobs, set to collect_info with shortcode_jobs`)
+
+  return { response, updatedUser }
 }
 
 // ============================================
@@ -1268,25 +1457,45 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
           // Got everything including coordinates - find jobs
           console.log('📝 collect_info: All fields complete, finding jobs...')
 
-          // Find and present jobs
-          const matchResult = await findAndPresentJobsConversational(updatedUser)
-
-          // Set status to 'matching' BEFORE database update
-          updatedUser.onboarding_status = 'matching'
-          updatedUser.conversation_state = buildPostSearchState(matchResult)
-          nextStep = 'viewing_jobs'
-
-          console.log('📝 collect_info: Setting status to matching, jobs:', matchResult.jobs.length)
-
           const firstName = updatedUser.full_name?.split(' ')[0] || ''
-          const jobCount = matchResult.jobs.length
-          response = jobCount > 0
-            ? getText(lang, {
-                ms: `Okay ${firstName}, jap ye Kak Ani carikan...\n\nNi ${jobCount} kerja dekat dengan adik:\n\n${matchResult.message}`,
-                en: `Alright ${firstName}, let me check...\n\nFound ${jobCount} jobs near you:\n\n${matchResult.message}`,
-                zh: `好的${firstName}，让我找找...\n\n找到${jobCount}个附近的工作：\n\n${matchResult.message}`
-              })
-            : matchResult.message
+
+          // Check if shortcode jobs are pre-loaded
+          const shortcodeJobs = (updatedUser.conversation_state || {}).shortcode_jobs
+          if (shortcodeJobs && shortcodeJobs.length > 0) {
+            console.log(`📝 collect_info: Using ${shortcodeJobs.length} pre-loaded shortcode jobs`)
+            
+            updatedUser.onboarding_status = 'matching'
+            updatedUser.conversation_state = {
+              matched_jobs: shortcodeJobs,
+              current_job_index: 0
+            }
+            nextStep = 'viewing_jobs'
+
+            response = getText(lang, {
+              ms: `Ok noted!\nNama: ${updatedUser.full_name}\nUmur: ${updatedUser.age}\nJantina: ${updatedUser.gender === 'male' ? 'Lelaki' : 'Perempuan'}\nLokasi: ${updatedUser.location_city || updatedUser.location_state}\n\nBoleh pilih kerja dari senarai tadi. Balas nombor untuk mohon, atau 'lagi' untuk lebih banyak.`,
+              en: `Ok noted!\nName: ${updatedUser.full_name}\nAge: ${updatedUser.age}\nGender: ${updatedUser.gender === 'male' ? 'Male' : 'Female'}\nLocation: ${updatedUser.location_city || updatedUser.location_state}\n\nYou can now select from the jobs listed earlier. Reply with a number to apply, or 'more' for more options.`,
+              zh: `好的！\n姓名：${updatedUser.full_name}\n年龄：${updatedUser.age}\n性别：${updatedUser.gender === 'male' ? '男' : '女'}\n地点：${updatedUser.location_city || updatedUser.location_state}\n\n现在可以从之前的列表中选择工作。回复数字申请，或「更多」查看更多。`
+            })
+          } else {
+            // Normal flow - find and present jobs
+            const matchResult = await findAndPresentJobsConversational(updatedUser)
+
+            // Set status to 'matching' BEFORE database update
+            updatedUser.onboarding_status = 'matching'
+            updatedUser.conversation_state = buildPostSearchState(matchResult)
+            nextStep = 'viewing_jobs'
+
+            console.log('📝 collect_info: Setting status to matching, jobs:', matchResult.jobs.length)
+
+            const jobCount = matchResult.jobs.length
+            response = jobCount > 0
+              ? getText(lang, {
+                  ms: `Okay ${firstName}, jap ye Kak Ani carikan...\n\nNi ${jobCount} kerja dekat dengan adik:\n\n${matchResult.message}`,
+                  en: `Alright ${firstName}, let me check...\n\nFound ${jobCount} jobs near you:\n\n${matchResult.message}`,
+                  zh: `好的${firstName}，让我找找...\n\n找到${jobCount}个附近的工作：\n\n${matchResult.message}`
+                })
+              : matchResult.message
+          }
         }
       } else {
         // Still missing some info - ask for it
