@@ -858,9 +858,7 @@ async function handleShortcodeSearch(
     external_job_id: job.external_job_id
   }))
 
-  // Check if user is a returning user with complete profile
   const hasProfile = user.full_name && user.age && user.gender
-  const lang = user.preferred_language || 'ms'
   const jobsMessage = formatJobsMessage(matchedJobs, 0, lang)
 
   const searchTypeLabel = type === 'geo'
