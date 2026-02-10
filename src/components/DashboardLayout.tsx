@@ -96,9 +96,7 @@ function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-3 px-2 py-2">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground flex-shrink-0 font-bold text-sm">
-            101
-          </div>
+          <img src={logo} alt="101Kerja Logo" className="h-8 w-8 rounded-lg object-contain flex-shrink-0" />
           {!isCollapsed && (
             <div className="flex flex-col">
               <span className="font-semibold text-sidebar-foreground text-sm">101Kerja</span>
