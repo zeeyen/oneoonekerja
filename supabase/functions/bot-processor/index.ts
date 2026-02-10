@@ -782,7 +782,7 @@ async function handleShortcodeSearch(
   type: 'geo' | 'com',
   slug: string
 ): Promise<{ response: string, updatedUser: User }> {
-  const lang = 'ms' // Default to Malay for first message
+  const lang = user.preferred_language || 'ms'
   const expanded = expandSlug(slug)
   const pattern = buildIlikePattern(expanded)
   
