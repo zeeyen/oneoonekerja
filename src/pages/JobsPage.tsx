@@ -317,6 +317,9 @@ export default function JobsPage() {
                             }`}
                             onClick={() => navigate(`/jobs/${job.id}`)}
                           >
+                            <TableCell className="font-mono text-sm text-muted-foreground">
+                              {job.external_job_id || '-'}
+                            </TableCell>
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
                                 {job.title}
