@@ -278,10 +278,11 @@ export default function JobsPage() {
           ) : data && data.jobs.length > 0 ? (
             <>
               <div className="table-responsive">
-                <div className="rounded-md border min-w-[700px]">
+                <div className="rounded-md border min-w-[800px]">
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead>Job ID</TableHead>
                         <TableHead>Title</TableHead>
                         <TableHead>Company</TableHead>
                         <TableHead>
