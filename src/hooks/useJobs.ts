@@ -64,7 +64,7 @@ async function fetchJobs({
   // Apply search filter
   if (search.trim()) {
     const searchTerm = `%${search.trim()}%`;
-    query = query.or(`title.ilike.${searchTerm},company.ilike.${searchTerm}`);
+    query = query.or(`title.ilike.${searchTerm},company.ilike.${searchTerm},external_job_id.ilike.${searchTerm}`);
   }
 
   // Apply status filter (based on expire_by date)

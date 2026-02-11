@@ -201,7 +201,7 @@ export default function JobsPage() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by title or company..."
+                placeholder="Search by Job ID, title or company..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 className="pl-9"
@@ -278,10 +278,11 @@ export default function JobsPage() {
           ) : data && data.jobs.length > 0 ? (
             <>
               <div className="table-responsive">
-                <div className="rounded-md border min-w-[700px]">
+                <div className="rounded-md border min-w-[800px]">
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead>Job ID</TableHead>
                         <TableHead>Title</TableHead>
                         <TableHead>Company</TableHead>
                         <TableHead>
@@ -316,6 +317,9 @@ export default function JobsPage() {
                             }`}
                             onClick={() => navigate(`/jobs/${job.id}`)}
                           >
+                            <TableCell className="font-mono text-sm text-muted-foreground">
+                              {job.external_job_id || '-'}
+                            </TableCell>
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
                                 {job.title}
