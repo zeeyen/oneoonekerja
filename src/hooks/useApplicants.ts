@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { Applicant } from '@/types/database';
 
-export type ApplicantFilter = 'all' | 'active' | 'completed' | 'in_progress' | 'new' | 'banned' | 'has_violations';
+export type ApplicantFilter = 'all' | 'active' | 'completed' | 'in_progress' | 'matching' | 'new' | 'banned' | 'has_violations';
 
 interface UseApplicantsOptions {
   search: string;
@@ -49,6 +49,9 @@ async function fetchApplicants({
     case 'new':
       query = query.eq('onboarding_status', 'new');
       break;
+    case 'matching':
+      query = query.eq('onboarding_status', 'matching');
+      break;
     case 'banned':
       query = query
         .not('banned_until', 'is', null)
@@ -79,6 +82,66 @@ async function fetchApplicants({
     totalCount: count ?? 0,
     totalPages: Math.ceil((count ?? 0) / pageSize),
   };
+}
+
+export async function fetchAllFilteredApplicants(
+  search: string,
+  filter: ApplicantFilter
+): Promise<Applicant[]> {
+  const allResults: Applicant[] = [];
+  const chunkSize = 1000;
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    let query = supabase.from('applicants').select('*');
+
+    if (search.trim()) {
+      const searchTerm = `%${search.trim()}%`;
+      query = query.or(
+        `full_name.ilike.${searchTerm},phone_number.ilike.${searchTerm},ic_number.ilike.${searchTerm}`
+      );
+    }
+
+    switch (filter) {
+      case 'active':
+        query = query.eq('is_active', true);
+        break;
+      case 'completed':
+        query = query.eq('onboarding_status', 'completed');
+        break;
+      case 'in_progress':
+        query = query.eq('onboarding_status', 'in_progress');
+        break;
+      case 'new':
+        query = query.eq('onboarding_status', 'new');
+        break;
+      case 'matching':
+        query = query.eq('onboarding_status', 'matching');
+        break;
+      case 'banned':
+        query = query
+          .not('banned_until', 'is', null)
+          .gt('banned_until', new Date().toISOString());
+        break;
+      case 'has_violations':
+        query = query.gt('violation_count', 0);
+        break;
+    }
+
+    query = query
+      .order('last_active_at', { ascending: false })
+      .range(from, from + chunkSize - 1);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    allResults.push(...(data ?? []));
+    hasMore = (data?.length ?? 0) === chunkSize;
+    from += chunkSize;
+  }
+
+  return allResults;
 }
 
 export function useApplicants(options: UseApplicantsOptions) {

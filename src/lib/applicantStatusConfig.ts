@@ -16,6 +16,10 @@ export const onboardingStatusConfig: Record<OnboardingStatus, StatusConfig> = {
     label: 'In Progress',
     className: 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-yellow-200',
   },
+  matching: {
+    label: 'Matching',
+    className: 'bg-purple-100 text-purple-800 hover:bg-purple-100 border-purple-200',
+  },
   completed: {
     label: 'Completed',
     className: 'bg-green-100 text-green-800 hover:bg-green-100 border-green-200',

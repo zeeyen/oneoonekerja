@@ -1,23 +1,20 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { PhoneLink } from '@/components/PhoneLink';
 import { useNavigate } from 'react-router-dom';
-import { useApplicants, useTotalApplicantsCount, type ApplicantFilter } from '@/hooks/useApplicants';
+import { useApplicants, useTotalApplicantsCount, fetchAllFilteredApplicants, type ApplicantFilter } from '@/hooks/useApplicants';
 import { getApplicantStatusConfig, isApplicantBanned } from '@/lib/applicantStatusConfig';
+import { maskIcNumber } from '@/lib/maskSensitiveData';
+import { useAdmin } from '@/contexts/AdminContext';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorFallback } from '@/components/ErrorFallback';
 import { BanDetailsDialog } from '@/components/BanDetailsDialog';
 import { TooltipHeader } from '@/components/TooltipHeader';
+import { ApplicantFunnel } from '@/components/ApplicantFunnel';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -39,29 +36,29 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Search, Users as UsersIcon, AlertTriangle } from 'lucide-react';
+import { Search, Users as UsersIcon, AlertTriangle, Download, Loader2 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useDebounce } from '@/hooks/useDebounce';
+import { toast } from 'sonner';
 import type { Applicant } from '@/types/database';
 
 const PAGE_SIZE = 20;
 
-const filterOptions: { value: ApplicantFilter; label: string }[] = [
-  { value: 'all', label: 'All Applicants' },
-  { value: 'active', label: 'Active Only' },
-  { value: 'completed', label: 'Completed Onboarding' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'new', label: 'New' },
-  { value: 'banned', label: 'Banned' },
-  { value: 'has_violations', label: 'Has Violations' },
-];
+function escapeCsvField(value: string): string {
+  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
 
 export default function ApplicantsPage() {
   const navigate = useNavigate();
+  const { isAdmin } = useAdmin();
   const [searchInput, setSearchInput] = useState('');
   const [filter, setFilter] = useState<ApplicantFilter>('all');
   const [page, setPage] = useState(1);
   const [banDialogApplicant, setBanDialogApplicant] = useState<Applicant | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const debouncedSearch = useDebounce(searchInput, 300);
 
@@ -93,7 +90,6 @@ export default function ApplicantsPage() {
 
   const getViolationBadge = (count: number) => {
     if (count === 0) return null;
-    
     const isHighRisk = count >= 3;
     return (
       <Badge 
@@ -144,6 +140,41 @@ export default function ApplicantsPage() {
       </div>
     );
   };
+
+  const handleExportCsv = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const applicants = await fetchAllFilteredApplicants(debouncedSearch, filter);
+      
+      const headers = ['Name', 'Phone', 'IC Number', 'City', 'State', 'Status', 'Violations', 'Last Active', 'Created'];
+      const rows = applicants.map((a) => [
+        escapeCsvField(a.full_name || 'Unknown'),
+        escapeCsvField(a.phone_number),
+        escapeCsvField(maskIcNumber(a.ic_number, isAdmin)),
+        escapeCsvField(a.location_city || ''),
+        escapeCsvField(a.location_state || ''),
+        escapeCsvField(isApplicantBanned(a) ? 'Banned' : (a.onboarding_status || 'new')),
+        String(a.violation_count),
+        a.last_active_at ? format(new Date(a.last_active_at), 'yyyy-MM-dd HH:mm') : '',
+        a.created_at ? format(new Date(a.created_at), 'yyyy-MM-dd HH:mm') : '',
+      ]);
+
+      const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `applicants-${filter}-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${applicants.length} applicants to CSV`);
+    } catch (err) {
+      console.error('CSV export error:', err);
+      toast.error('Failed to export CSV');
+    } finally {
+      setIsExporting(false);
+    }
+  }, [debouncedSearch, filter, isAdmin]);
 
   const renderPagination = () => {
     if (!data || data.totalPages <= 1) return null;
@@ -209,7 +240,10 @@ export default function ApplicantsPage() {
         </div>
       </div>
 
-      {/* Search and Filters */}
+      {/* Funnel Widget */}
+      <ApplicantFunnel activeFilter={filter} onFilterChange={setFilter} />
+
+      {/* Search and CSV Export */}
       <Card className="shadow-sm">
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row gap-4">
@@ -222,18 +256,19 @@ export default function ApplicantsPage() {
                 className="pl-9"
               />
             </div>
-            <Select value={filter} onValueChange={(value) => setFilter(value as ApplicantFilter)}>
-              <SelectTrigger className="w-full sm:w-[200px]">
-                <SelectValue placeholder="Filter applicants" />
-              </SelectTrigger>
-              <SelectContent>
-                {filterOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Button
+              variant="outline"
+              onClick={handleExportCsv}
+              disabled={isExporting}
+              className="shrink-0"
+            >
+              {isExporting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              Download CSV
+            </Button>
           </div>
         </CardContent>
       </Card>
