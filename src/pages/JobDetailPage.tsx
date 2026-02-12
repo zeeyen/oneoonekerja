@@ -95,7 +95,7 @@ export default function JobDetailPage() {
           url: formData.url || null,
           postcode: formData.postcode || null,
           location_address: formData.location_address || null,
-          last_edited_by: user.email,
+          last_edited_by: user.id,
           last_edited_at: new Date().toISOString(),
         })
         .eq('id', id);
