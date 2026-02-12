@@ -27,6 +27,14 @@ export interface CsvRow {
 
 export type ResolutionMethod = 'local' | 'ai' | null;
 
+export interface ExistingJobData {
+  id: string;
+  location_address: string | null;
+  postcode: string | null;
+  location_city: string | null;
+  location_state: string | null;
+}
+
 export interface ParsedRow {
   rowNumber: number;
   raw: CsvRow;
@@ -35,6 +43,9 @@ export interface ParsedRow {
   locationResolved: boolean;
   resolutionMethod: ResolutionMethod;
   isExisting: boolean;
+  hasLocationChanges: boolean;
+  locationChanges: string[];
+  existingJobDbId: string | null;
   errors: string[];
 }
 
@@ -62,6 +73,14 @@ export function generateCsvTemplate(): string {
 /** Treat literal "NULL" (case-insensitive) as empty */
 function cleanNull(val: string): string {
   return val.trim().toUpperCase() === 'NULL' ? '' : val.trim();
+}
+
+/** Normalize a value for comparison: lowercase, trim, treat null/empty/"NULL" as empty string */
+function normalizeForCompare(val: string | null | undefined): string {
+  if (!val) return '';
+  const trimmed = val.trim();
+  if (trimmed.toUpperCase() === 'NULL') return '';
+  return trimmed.toLowerCase();
 }
 
 /** Convert DD/MM/YYYY to YYYY-MM-DD. Returns null if invalid. */
@@ -196,25 +215,49 @@ function resolveLocation(
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Fetch all existing external_job_id values from the jobs table */
-async function fetchExistingJobIds(): Promise<Set<string>> {
-  const ids = new Set<string>();
+/** Fetch all existing jobs with their location data, keyed by external_job_id */
+async function fetchExistingJobs(): Promise<Map<string, ExistingJobData>> {
+  const jobsMap = new Map<string, ExistingJobData>();
   let from = 0;
   const pageSize = 1000;
   while (true) {
     const { data, error } = await supabase
       .from('jobs')
-      .select('external_job_id')
+      .select('id, external_job_id, location_address, postcode, location_city, location_state')
       .not('external_job_id', 'is', null)
       .range(from, from + pageSize - 1);
     if (error || !data || data.length === 0) break;
     for (const row of data) {
-      if (row.external_job_id) ids.add(row.external_job_id);
+      if (row.external_job_id) {
+        jobsMap.set(row.external_job_id, {
+          id: row.id,
+          location_address: row.location_address,
+          postcode: row.postcode,
+          location_city: row.location_city,
+          location_state: row.location_state,
+        });
+      }
     }
     if (data.length < pageSize) break;
     from += pageSize;
   }
-  return ids;
+  return jobsMap;
+}
+
+/** Backward-compatible alias */
+async function fetchExistingJobIds(): Promise<Set<string>> {
+  const map = await fetchExistingJobs();
+  return new Set(map.keys());
+}
+
+/** Detect which location fields changed between CSV and DB */
+function detectLocationChanges(raw: CsvRow, existing: ExistingJobData): string[] {
+  const changes: string[] = [];
+  if (normalizeForCompare(cleanNull(raw.location)) !== normalizeForCompare(existing.location_address)) changes.push('location');
+  if (normalizeForCompare(cleanNull(raw.postcode)) !== normalizeForCompare(existing.postcode)) changes.push('postcode');
+  if (normalizeForCompare(cleanNull(raw.city)) !== normalizeForCompare(existing.location_city)) changes.push('city');
+  if (normalizeForCompare(cleanNull(raw.state)) !== normalizeForCompare(existing.location_state)) changes.push('state');
+  return changes;
 }
 
 export function useBulkImportJobs() {
@@ -239,11 +282,24 @@ export function useBulkImportJobs() {
   }, [locationsLoaded]);
 
   const processRows = useCallback(
-    (csvRows: CsvRow[], existingIds?: Set<string>): ParsedRow[] => {
+    (csvRows: CsvRow[], existingJobs?: Map<string, ExistingJobData>): ParsedRow[] => {
       return csvRows.map((raw, i) => {
         const errors = validateRow(raw);
         const resolved = resolveLocation(raw.city, raw.state, raw.location, locations);
         const jobId = cleanNull(raw.job_id);
+        const existingJob = jobId ? existingJobs?.get(jobId) : undefined;
+        const isExisting = !!existingJob;
+
+        let hasLocationChanges = false;
+        let locationChanges: string[] = [];
+        let existingJobDbId: string | null = null;
+
+        if (isExisting && existingJob) {
+          existingJobDbId = existingJob.id;
+          locationChanges = detectLocationChanges(raw, existingJob);
+          hasLocationChanges = locationChanges.length > 0;
+        }
+
         return {
           rowNumber: i + 1,
           raw,
@@ -251,7 +307,10 @@ export function useBulkImportJobs() {
           longitude: resolved?.longitude ?? null,
           locationResolved: resolved !== null,
           resolutionMethod: resolved ? 'local' as ResolutionMethod : null,
-          isExisting: !!(jobId && existingIds?.has(jobId)),
+          isExisting,
+          hasLocationChanges,
+          locationChanges,
+          existingJobDbId,
           errors,
         };
       });
@@ -261,8 +320,17 @@ export function useBulkImportJobs() {
 
   const resolveWithAi = useCallback(
     async (rows: ParsedRow[]): Promise<ParsedRow[]> => {
+      // Include both new rows and existing rows with location changes that need coordinates
       const unresolvedIndices = rows
-        .map((r, i) => (!r.locationResolved && r.errors.length === 0 && !r.isExisting ? i : -1))
+        .map((r, i) => {
+          if (r.errors.length > 0) return -1;
+          if (r.locationResolved) return -1;
+          // New rows
+          if (!r.isExisting) return i;
+          // Existing rows with location changes needing re-resolution
+          if (r.hasLocationChanges) return i;
+          return -1;
+        })
         .filter((i) => i !== -1);
 
       if (unresolvedIndices.length === 0) return rows;
@@ -321,18 +389,60 @@ export function useBulkImportJobs() {
     [],
   );
 
+  const updateExistingRows = useCallback(
+    async (rows: ParsedRow[]): Promise<{ updated: number }> => {
+      const toUpdate = rows.filter((r) => r.isExisting && r.hasLocationChanges && r.existingJobDbId);
+      if (toUpdate.length === 0) return { updated: 0 };
+
+      let updated = 0;
+      for (let i = 0; i < toUpdate.length; i += CHUNK_SIZE) {
+        const chunk = toUpdate.slice(i, i + CHUNK_SIZE);
+        for (const row of chunk) {
+          const { error } = await supabase
+            .from('jobs')
+            .update({
+              location_address: cleanNull(row.raw.location) || null,
+              postcode: cleanNull(row.raw.postcode) || null,
+              location_city: cleanNull(row.raw.city) || null,
+              location_state: cleanNull(row.raw.state) || null,
+              latitude: row.latitude,
+              longitude: row.longitude,
+              last_edited_at: new Date().toISOString(),
+              last_edited_by: user?.id ?? null,
+            })
+            .eq('id', row.existingJobDbId!);
+          if (error) {
+            console.error('Failed to update job', row.existingJobDbId, error);
+          } else {
+            updated++;
+          }
+        }
+      }
+      return { updated };
+    },
+    [user],
+  );
+
   const importRows = useCallback(
-    async (rows: ParsedRow[]): Promise<{ inserted: number; skipped: number; locationWarnings: number }> => {
+    async (rows: ParsedRow[]): Promise<{ inserted: number; skipped: number; updated: number; locationWarnings: number }> => {
       const newValidRows = rows.filter((r) => r.errors.length === 0 && !r.isExisting);
-      const skipped = rows.filter((r) => r.isExisting).length;
-      if (newValidRows.length === 0) throw new Error('No new valid rows to import');
+      const updateRows = rows.filter((r) => r.isExisting && r.hasLocationChanges);
+      const skipped = rows.filter((r) => r.isExisting && !r.hasLocationChanges).length;
+
+      if (newValidRows.length === 0 && updateRows.length === 0) throw new Error('No new or updatable rows to process');
 
       setImporting(true);
       setProgress(0);
       let inserted = 0;
       let locationWarnings = 0;
+      const totalWork = newValidRows.length + updateRows.length;
 
       try {
+        // Update existing rows with location changes
+        const { updated } = await updateExistingRows(rows);
+        setProgress(totalWork > 0 ? Math.round((updateRows.length / totalWork) * 100) : 0);
+
+        // Insert new rows
         for (let i = 0; i < newValidRows.length; i += CHUNK_SIZE) {
           const chunk = newValidRows.slice(i, i + CHUNK_SIZE);
           const records = chunk.map((r) => {
@@ -366,22 +476,23 @@ export function useBulkImportJobs() {
           const { error } = await supabase.from('jobs').insert(records);
           if (error) throw error;
           inserted += chunk.length;
-          setProgress(Math.round((inserted / newValidRows.length) * 100));
+          setProgress(Math.round(((updateRows.length + inserted) / totalWork) * 100));
         }
 
         queryClient.invalidateQueries({ queryKey: ['jobs'] });
         queryClient.invalidateQueries({ queryKey: ['jobs-active-count'] });
-        return { inserted, skipped, locationWarnings };
+        return { inserted, skipped, updated, locationWarnings };
       } finally {
         setImporting(false);
       }
     },
-    [user, queryClient],
+    [user, queryClient, updateExistingRows],
   );
 
   return {
     fetchLocations,
     fetchExistingJobIds,
+    fetchExistingJobs,
     locationsLoaded,
     processRows,
     resolveWithAi,

@@ -18,7 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Upload, Download, CheckCircle2, AlertTriangle, XCircle, FileText, Sparkles, Ban } from 'lucide-react';
+import { Upload, Download, CheckCircle2, AlertTriangle, XCircle, FileText, Sparkles, Ban, RefreshCw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import {
   useBulkImportJobs,
@@ -39,7 +39,7 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
   const [fileName, setFileName] = useState<string | null>(null);
 
   const {
-    fetchLocations, fetchExistingJobIds, locationsLoaded, processRows,
+    fetchLocations, fetchExistingJobs, locationsLoaded, processRows,
     resolveWithAi, aiResolving, aiProgress,
     importRows, importing, progress,
   } = useBulkImportJobs();
@@ -79,10 +79,10 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
       }
       setParseError(null);
 
-      const existingIds = await fetchExistingJobIds();
-      setParsedRows(processRows(rows, existingIds));
+      const existingJobs = await fetchExistingJobs();
+      setParsedRows(processRows(rows, existingJobs));
     },
-    [processRows, fetchExistingJobIds],
+    [processRows, fetchExistingJobs],
   );
 
   const handleAiResolve = useCallback(async () => {
@@ -97,18 +97,28 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
   }, [resolveWithAi, parsedRows]);
 
   const newCount = parsedRows.filter((r) => r.errors.length === 0 && !r.isExisting).length;
-  const existingCount = parsedRows.filter((r) => r.isExisting).length;
+  const updateCount = parsedRows.filter((r) => r.isExisting && r.hasLocationChanges).length;
+  const existingCount = parsedRows.filter((r) => r.isExisting && !r.hasLocationChanges).length;
   const errorCount = parsedRows.filter((r) => r.errors.length > 0).length;
-  const unresolvedCount = parsedRows.filter((r) => !r.locationResolved && r.errors.length === 0 && !r.isExisting).length;
+  const unresolvedCount = parsedRows.filter((r) => {
+    if (r.locationResolved || r.errors.length > 0) return false;
+    // New rows or existing rows with location changes
+    return !r.isExisting || r.hasLocationChanges;
+  }).length;
   const aiResolvedCount = parsedRows.filter((r) => r.resolutionMethod === 'ai').length;
   const localResolvedCount = parsedRows.filter((r) => r.resolutionMethod === 'local').length;
 
   const handleImport = useCallback(async () => {
     try {
       const result = await importRows(parsedRows);
+      const parts: string[] = [];
+      if (result.inserted > 0) parts.push(`${result.inserted} new jobs imported`);
+      if (result.updated > 0) parts.push(`${result.updated} existing jobs updated`);
+      if (result.skipped > 0) parts.push(`${result.skipped} unchanged skipped`);
+      if (result.locationWarnings > 0) parts.push(`${result.locationWarnings} without coordinates`);
       toast({
         title: 'Import complete',
-        description: `${result.inserted} new jobs imported. ${result.skipped > 0 ? `${result.skipped} existing skipped.` : ''} ${result.locationWarnings > 0 ? `${result.locationWarnings} without coordinates.` : ''}`,
+        description: parts.join('. ') + '.',
       });
       onOpenChange(false);
     } catch (err: any) {
@@ -121,6 +131,12 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
   }, [importRows, parsedRows, onOpenChange]);
 
   const busy = importing || aiResolving;
+
+  // Build button text
+  const buttonParts: string[] = [];
+  if (newCount > 0) buttonParts.push(`Import ${newCount} New`);
+  if (updateCount > 0) buttonParts.push(`Update ${updateCount} Existing`);
+  const buttonText = importing ? 'Processing...' : (buttonParts.join(', ') || 'Import');
 
   return (
     <Dialog open={open} onOpenChange={busy ? undefined : onOpenChange}>
@@ -174,9 +190,14 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
               <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
                 {newCount} new
               </Badge>
+              {updateCount > 0 && (
+                <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                  {updateCount} updates
+                </Badge>
+              )}
               {existingCount > 0 && (
                 <Badge variant="secondary">
-                  {existingCount} existing
+                  {existingCount} unchanged
                 </Badge>
               )}
               {errorCount > 0 && (
@@ -241,6 +262,8 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
                       className={
                         row.errors.length > 0
                           ? 'bg-destructive/5'
+                          : row.isExisting && row.hasLocationChanges
+                          ? 'bg-blue-50 dark:bg-blue-950/30'
                           : row.isExisting
                           ? 'opacity-50'
                           : ''
@@ -275,10 +298,15 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
                             <XCircle className="h-3 w-3 shrink-0" />
                             <span className="truncate max-w-[150px]">{row.errors[0]}</span>
                           </div>
+                        ) : row.isExisting && row.hasLocationChanges ? (
+                          <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 text-xs">
+                            <RefreshCw className="h-3 w-3 shrink-0" />
+                            <span className="truncate max-w-[150px]">Update ({row.locationChanges.join(', ')})</span>
+                          </div>
                         ) : row.isExisting ? (
                           <div className="flex items-center gap-1 text-muted-foreground text-xs">
                             <Ban className="h-3 w-3 shrink-0" />
-                            <span>Exists</span>
+                            <span>Unchanged</span>
                           </div>
                         ) : (
                           <span className="text-green-600 text-xs">New</span>
@@ -296,7 +324,7 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
             <div className="space-y-2">
               <Progress value={progress} className="h-2" />
               <p className="text-sm text-muted-foreground text-center">
-                Importing... {progress}%
+                Processing... {progress}%
               </p>
             </div>
           )}
@@ -306,8 +334,8 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={handleImport} disabled={busy || newCount === 0}>
-            {importing ? 'Importing...' : `Import ${newCount} New Jobs`}
+          <Button onClick={handleImport} disabled={busy || (newCount === 0 && updateCount === 0)}>
+            {buttonText}
           </Button>
         </DialogFooter>
       </DialogContent>
