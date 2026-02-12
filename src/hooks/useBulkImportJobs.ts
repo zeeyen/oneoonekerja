@@ -33,6 +33,7 @@ export interface ExistingJobData {
   postcode: string | null;
   location_city: string | null;
   location_state: string | null;
+  url: string | null;
 }
 
 export interface ParsedRow {
@@ -223,7 +224,7 @@ async function fetchExistingJobs(): Promise<Map<string, ExistingJobData>> {
   while (true) {
     const { data, error } = await supabase
       .from('jobs')
-      .select('id, external_job_id, location_address, postcode, location_city, location_state')
+      .select('id, external_job_id, location_address, postcode, location_city, location_state, url')
       .not('external_job_id', 'is', null)
       .range(from, from + pageSize - 1);
     if (error || !data || data.length === 0) break;
@@ -235,6 +236,7 @@ async function fetchExistingJobs(): Promise<Map<string, ExistingJobData>> {
           postcode: row.postcode,
           location_city: row.location_city,
           location_state: row.location_state,
+          url: row.url,
         });
       }
     }
@@ -257,6 +259,7 @@ function detectLocationChanges(raw: CsvRow, existing: ExistingJobData): string[]
   if (normalizeForCompare(cleanNull(raw.postcode)) !== normalizeForCompare(existing.postcode)) changes.push('postcode');
   if (normalizeForCompare(cleanNull(raw.city)) !== normalizeForCompare(existing.location_city)) changes.push('city');
   if (normalizeForCompare(cleanNull(raw.state)) !== normalizeForCompare(existing.location_state)) changes.push('state');
+  if (normalizeForCompare(cleanNull(raw.url)) !== normalizeForCompare(existing.url)) changes.push('url');
   return changes;
 }
 
@@ -405,6 +408,7 @@ export function useBulkImportJobs() {
               postcode: cleanNull(row.raw.postcode) || null,
               location_city: cleanNull(row.raw.city) || null,
               location_state: cleanNull(row.raw.state) || null,
+              url: cleanNull(row.raw.url) || null,
               latitude: row.latitude,
               longitude: row.longitude,
               last_edited_at: new Date().toISOString(),
