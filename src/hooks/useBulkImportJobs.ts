@@ -224,7 +224,7 @@ async function fetchExistingJobs(): Promise<Map<string, ExistingJobData>> {
   while (true) {
     const { data, error } = await supabase
       .from('jobs')
-      .select('id, external_job_id, location_address, postcode, location_city, location_state')
+      .select('id, external_job_id, location_address, postcode, location_city, location_state, url')
       .not('external_job_id', 'is', null)
       .range(from, from + pageSize - 1);
     if (error || !data || data.length === 0) break;
