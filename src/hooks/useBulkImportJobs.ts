@@ -33,6 +33,7 @@ export interface ExistingJobData {
   postcode: string | null;
   location_city: string | null;
   location_state: string | null;
+  url: string | null;
 }
 
 export interface ParsedRow {
