@@ -408,6 +408,7 @@ export function useBulkImportJobs() {
               postcode: cleanNull(row.raw.postcode) || null,
               location_city: cleanNull(row.raw.city) || null,
               location_state: cleanNull(row.raw.state) || null,
+              url: cleanNull(row.raw.url) || null,
               latitude: row.latitude,
               longitude: row.longitude,
               last_edited_at: new Date().toISOString(),
