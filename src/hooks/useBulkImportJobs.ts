@@ -257,6 +257,7 @@ function detectLocationChanges(raw: CsvRow, existing: ExistingJobData): string[]
   if (normalizeForCompare(cleanNull(raw.postcode)) !== normalizeForCompare(existing.postcode)) changes.push('postcode');
   if (normalizeForCompare(cleanNull(raw.city)) !== normalizeForCompare(existing.location_city)) changes.push('city');
   if (normalizeForCompare(cleanNull(raw.state)) !== normalizeForCompare(existing.location_state)) changes.push('state');
+  if (normalizeForCompare(cleanNull(raw.url)) !== normalizeForCompare(existing.url)) changes.push('url');
   return changes;
 }
 
