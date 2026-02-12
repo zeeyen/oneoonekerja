@@ -236,6 +236,7 @@ async function fetchExistingJobs(): Promise<Map<string, ExistingJobData>> {
           postcode: row.postcode,
           location_city: row.location_city,
           location_state: row.location_state,
+          url: row.url,
         });
       }
     }
