@@ -2,7 +2,7 @@
 // 101Kerja WhatsApp Bot powered by GPT-4o-mini
 // Personality: Kak Ani - friendly kakak helping B40s find work
 // ENHANCED FLOW: Language → All Info → Jobs (no confirmation step)
-// Features: Running job numbers, language switch, customer service, session timeout
+// Features: Running job numbers, language switch, session timeout
 // Deploy: supabase functions deploy bot-processor --no-verify-jwt
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
@@ -95,10 +95,10 @@ async function handleProfanityViolation(user: User, message: string): Promise<{ 
     // Fourth violation: 72-hour ban
     banUntil = new Date(Date.now() + 72 * 60 * 60 * 1000) // 72 hours
     banReason = 'Penggunaan bahasa tidak sesuai berulang kali (4 kali)'
-    response = getText(lang, {
-      ms: `🚫 *Akaun Disekat 72 Jam*\n\nIni kali ke-4 adik melanggar peraturan. Akaun disekat selama 3 hari.\n\nSila hubungi khidmat pelanggan jika ada pertanyaan.`,
-      en: `🚫 *Account Suspended 72 Hours*\n\nThis is your 4th violation. Your account is suspended for 3 days.\n\nPlease contact customer service if you have questions.`,
-      zh: `🚫 *账户被封禁72小时*\n\n这是您第4次违规。您的账户被封禁3天。\n\n如有疑问请联系客服。`
+  response = getText(lang, {
+      ms: `🚫 *Akaun Disekat 72 Jam*\n\nIni kali ke-4 adik melanggar peraturan. Akaun disekat selama 3 hari.\n\nSila hubungi kami di support@101kerja.com jika ada pertanyaan.`,
+      en: `🚫 *Account Suspended 72 Hours*\n\nThis is your 4th violation. Your account is suspended for 3 days.\n\nPlease contact us at support@101kerja.com if you have questions.`,
+      zh: `🚫 *账户被封禁72小时*\n\n这是您第4次违规。您的账户被封禁3天。\n\n如有疑问请联系 support@101kerja.com。`
     })
   } else {
     // Fifth+ violation: 7-day ban (or permanent for repeat offenders)
@@ -106,9 +106,9 @@ async function handleProfanityViolation(user: User, message: string): Promise<{ 
     banUntil = new Date(Date.now() + banDays * 24 * 60 * 60 * 1000)
     banReason = `Penggunaan bahasa tidak sesuai berulang kali (${currentViolations} kali)`
     response = getText(lang, {
-      ms: `🚫 *Akaun Disekat ${banDays} Hari*\n\nAdik telah melanggar peraturan ${currentViolations} kali. Akaun disekat selama ${banDays} hari.\n\nHubungi khidmat pelanggan untuk rayuan.`,
-      en: `🚫 *Account Suspended ${banDays} Days*\n\nYou have violated our guidelines ${currentViolations} times. Your account is suspended for ${banDays} days.\n\nContact customer service to appeal.`,
-      zh: `🚫 *账户被封禁${banDays}天*\n\n您已违规${currentViolations}次。您的账户被封禁${banDays}天。\n\n请联系客服申诉。`
+      ms: `🚫 *Akaun Disekat ${banDays} Hari*\n\nAdik telah melanggar peraturan ${currentViolations} kali. Akaun disekat selama ${banDays} hari.\n\nHubungi kami di support@101kerja.com untuk rayuan.`,
+      en: `🚫 *Account Suspended ${banDays} Days*\n\nYou have violated our guidelines ${currentViolations} times. Your account is suspended for ${banDays} days.\n\nContact us at support@101kerja.com to appeal.`,
+      zh: `🚫 *账户被封禁${banDays}天*\n\n您已违规${currentViolations}次。您的账户被封禁${banDays}天。\n\n请联系 support@101kerja.com 申诉。`
     })
   }
 
@@ -403,32 +403,7 @@ Reply with *1* or *2*`,
 请回复 *1* 或 *2*`
 }
 
-// ============================================
-// CUSTOMER SERVICE MESSAGES
-// ============================================
-const CUSTOMER_SERVICE_MESSAGES = {
-  ms: `Nak bercakap dengan manusia? Boleh je!
 
-Hubungi khidmat pelanggan 101Kerja:
-📞 WhatsApp: +60142661357
-📧 Email: support@101kerja.com
-
-Atau balas "kerja" untuk teruskan cari kerja dengan Kak Ani.`,
-  en: `Want to speak to a human? Sure thing!
-
-Contact 101Kerja customer service:
-📞 WhatsApp: +60142661357
-📧 Email: support@101kerja.com
-
-Or reply "jobs" to continue finding jobs with me.`,
-  zh: `想和真人交谈？没问题！
-
-联系101Kerja客户服务：
-📞 WhatsApp: +60142661357
-📧 Email: support@101kerja.com
-
-或回复"工作"继续和我找工作。`
-}
 
 // ============================================
 // MAIN HANDLER
@@ -491,14 +466,8 @@ serve(async (req) => {
       return jsonResponse(result)
     }
 
-    // Check for customer service request
-    if (detectCustomerServiceIntent(message)) {
-      const lang = user.preferred_language || 'ms'
-      return jsonResponse({
-        response: CUSTOMER_SERVICE_MESSAGES[lang as keyof typeof CUSTOMER_SERVICE_MESSAGES] || CUSTOMER_SERVICE_MESSAGES.ms,
-        updatedUser: user
-      })
-    }
+
+
 
     // Check for language change command (mid-flow)
     const langChangeResult = detectLanguageChangeCommand(message)
@@ -698,19 +667,8 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * c
 }
 
-// ============================================
-// DETECT CUSTOMER SERVICE INTENT
-// ============================================
-function detectCustomerServiceIntent(message: string): boolean {
-  const lower = message.toLowerCase().trim()
-  const csKeywords = [
-    'customer service', 'agent', 'human', 'manusia', 'staff', 'support',
-    'bantuan', 'help me', 'tolong', 'complain', 'aduan', 'masalah',
-    'talk to someone', 'speak to someone', 'nak cakap dengan orang',
-    '客服', '人工', '帮助'
-  ]
-  return csKeywords.some(keyword => lower.includes(keyword))
-}
+
+
 
 // ============================================
 // SHORTCODE DETECTION (geo-xxxx / com-xxxx)
