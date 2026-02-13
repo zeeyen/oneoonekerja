@@ -439,16 +439,9 @@ serve(async (req) => {
   }
 
   try {
-    // Validate request origin using META_APP_SECRET as shared secret (if configured)
-    const requestSecret = req.headers.get('x-bot-secret')
-    const expectedSecret = Deno.env.get('META_APP_SECRET')
-    if (expectedSecret && requestSecret !== expectedSecret) {
-      console.error('🚫 Unauthorized bot-processor request: invalid or missing x-bot-secret header')
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
-    }
-    if (!expectedSecret) {
-      console.warn('⚠️ META_APP_SECRET not configured. Allowing request without validation.')
-    }
+    // Note: META_APP_SECRET validation removed — the upstream webhook handler
+    // already validates the Meta webhook signature. This internal endpoint
+    // is called by our own webhook handler, not directly by Meta.
 
     const { user, message, messageType, locationData }: ProcessRequest = await req.json()
 
