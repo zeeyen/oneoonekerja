@@ -34,6 +34,7 @@ import {
   MessageSquare,
   CheckCircle,
   XCircle,
+  Download,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAdmin } from '@/contexts/AdminContext';
@@ -97,6 +98,34 @@ export default function ApplicantDetailPage() {
       .filter(([, available]) => available)
       .map(([slot]) => slot.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()));
     return slots.length > 0 ? slots : ['Not specified'];
+  };
+
+  const handleDownloadConversation = () => {
+    if (!conversations || conversations.length === 0) return;
+    const escapeCsv = (val: string) => {
+      if (/[",\n\r]/.test(val)) return `"${val.replace(/"/g, '""')}"`;
+      return val;
+    };
+    const header = 'Date,Time,Direction,Type,Content';
+    const rows = conversations.map((msg) => {
+      const d = new Date(msg.created_at);
+      return [
+        format(d, 'yyyy-MM-dd'),
+        format(d, 'HH:mm:ss'),
+        msg.direction,
+        msg.message_type || 'text',
+        escapeCsv(msg.message_content || `[${msg.message_type}]`),
+      ].join(',');
+    });
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const name = (applicant.full_name || 'unknown').replace(/\s+/g, '_');
+    a.href = url;
+    a.download = `conversation_${name}_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -343,6 +372,14 @@ export default function ApplicantDetailPage() {
         <TabsContent value="conversations">
           <Card className="shadow-sm">
             <CardContent className="pt-6">
+              {conversations && conversations.length > 0 && (
+                <div className="flex justify-end mb-4">
+                  <Button variant="outline" size="sm" onClick={handleDownloadConversation}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download CSV
+                  </Button>
+                </div>
+              )}
               {conversationsLoading ? (
                 <div className="space-y-3">
                   {[...Array(5)].map((_, i) => (
