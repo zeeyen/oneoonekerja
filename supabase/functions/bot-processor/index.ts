@@ -439,6 +439,14 @@ serve(async (req) => {
   }
 
   try {
+    // Validate request origin using META_APP_SECRET as shared secret
+    const requestSecret = req.headers.get('x-bot-secret')
+    const expectedSecret = Deno.env.get('META_APP_SECRET')
+    if (!expectedSecret || requestSecret !== expectedSecret) {
+      console.error('🚫 Unauthorized bot-processor request: invalid or missing x-bot-secret header')
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+    }
+
     const { user, message, messageType, locationData }: ProcessRequest = await req.json()
 
     console.log(`🤖 Kak Ani processing for user ${user.id}`)
