@@ -1,42 +1,48 @@
 
 
-## Fix: "Thanos" (and all messages) Blocked by Bot-Processor Auth Check
+## Remove Human Agent / Customer Service Flow from Bot Processor
 
-### Root Cause
+### What exists today
 
-The recent security fix added an `x-bot-secret` header validation at line 443-448 of `bot-processor/index.ts`. This check requires:
+The "human agent" flow is a simple keyword-detection-and-reply mechanism with **no state changes** -- it doesn't modify the user's onboarding step or conversation state. It consists of three isolated pieces:
 
-1. `META_APP_SECRET` to be set as an edge function secret
-2. The caller to send `x-bot-secret` header matching that secret
+1. **`CUSTOMER_SERVICE_MESSAGES` constant** (lines 406-431) -- Trilingual messages with a phone number and email directing users to contact support.
 
-**Neither condition is met.** `META_APP_SECRET` is not configured in the edge function secrets (only `LOVABLE_API_KEY`, `RESEND_API_KEY`, `VITE_SUPABASE_ANON_KEY`, and `VITE_SUPABASE_URL` exist). Because `Deno.env.get('META_APP_SECRET')` returns `undefined`, the `!expectedSecret` condition is always true, and **every request is rejected with a 401** before reaching any bot logic.
+2. **`detectCustomerServiceIntent()` function** (lines 701-713) -- Checks if the user's message contains keywords like "agent", "human", "tolong", "complain", etc.
 
-This is why "Thanos" and all other messages return "Maaf, sistem sedang sibuk" -- the upstream webhook handler receives a 401 from bot-processor and sends that generic error to WhatsApp.
+3. **Call site in the main handler** (lines 494-501) -- Early intercept in `processWithKakAni` that checks every incoming message and short-circuits with the CS message if detected.
 
-### Fix
+There are also a few **passive references** to "customer service" in ban/violation messages (lines 98-111) that tell banned users to "contact customer service". These are just text strings, not functional flows.
 
-**Two options (need your input on which caller sends the request):**
+### Dependencies and risks
 
-**Option A (Recommended -- Quick fix):** Make the auth check non-blocking when `META_APP_SECRET` is not configured. If the secret exists, enforce the header check. If it doesn't exist, allow the request through with a warning log. This restores functionality immediately while keeping the security layer ready for when the secret is added.
+- **No state dependencies**: The CS flow does not change `onboarding_step`, `conversation_state`, or any database records. Removing it won't break any downstream logic.
+- **No other callers**: `detectCustomerServiceIntent` and `CUSTOMER_SERVICE_MESSAGES` are only used at the single call site (line 494).
+- **Keyword overlap risk**: Words like "tolong" (help), "bantuan" (assistance), and "masalah" (problem) currently get intercepted by the CS detector **before** reaching the AI/onboarding logic. After removal, these words will flow through to Kak Ani's normal conversational handling, which is actually better UX -- Kak Ani can try to help directly instead of deflecting to a phone number.
 
-```text
-Before:  if (!expectedSecret || requestSecret !== expectedSecret) → BLOCK
-After:   if (expectedSecret && requestSecret !== expectedSecret) → BLOCK
-         if (!expectedSecret) → WARN and ALLOW
-```
+### Changes to make
 
-**Option B:** Add `META_APP_SECRET` as an edge function secret AND ensure the upstream webhook handler (which calls bot-processor) sends the `x-bot-secret` header. This requires knowing the external caller's configuration.
+**File: `supabase/functions/bot-processor/index.ts`**
 
-### Changes
+1. **Delete** the `CUSTOMER_SERVICE_MESSAGES` constant (lines 406-431)
+2. **Delete** the `detectCustomerServiceIntent()` function (lines 701-713)
+3. **Delete** the call site that checks for CS intent and returns early (lines 494-501)
+4. **Update ban messages** (lines 98-111): Replace "contact customer service" / "hubungi khidmat pelanggan" with a generic note like "Sila hubungi kami di support@101kerja.com" or simply remove those lines, since there's no live agent to escalate to. This is optional -- the ban messages still make sense as general text.
 
-**File: `supabase/functions/bot-processor/index.ts`** (lines 441-448)
+### What happens after removal
 
-Replace the strict auth block with a graceful fallback:
-- If `META_APP_SECRET` is configured and the header doesn't match: reject with 401 (secure)
-- If `META_APP_SECRET` is not configured: log a warning and allow the request through (operational)
+- Messages containing "tolong", "bantuan", "agent", "help me", etc. will no longer be intercepted early. They will flow through to the normal bot logic (onboarding or matching), where Kak Ani's AI responses will handle them contextually.
+- No functional flow is broken since the CS handler had no side effects.
+- The file header comment mentioning "customer service" (line 5) should also be cleaned up.
 
-Then redeploy the edge function.
+### Summary
 
-### Technical Detail
+| Item | Lines | Action |
+|------|-------|--------|
+| `CUSTOMER_SERVICE_MESSAGES` | 406-431 | Delete |
+| CS intent call site | 494-501 | Delete |
+| `detectCustomerServiceIntent()` | 701-713 | Delete |
+| Ban message text (optional) | 98-111 | Update wording |
+| File header comment | 5 | Remove "customer service" mention |
 
-The only code change is in the `serve()` handler at the top of the main request flow -- approximately 5 lines replaced. No other files are affected.
+Total: ~45 lines removed, zero risk of breaking any flow.
