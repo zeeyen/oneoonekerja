@@ -1,6 +1,7 @@
 import type { ApplicantFilter } from '@/hooks/useApplicants';
 import type { FunnelCounts } from '@/hooks/useApplicantFunnelCounts';
 import { useApplicantFunnelCounts } from '@/hooks/useApplicantFunnelCounts';
+import type { TimeFilter } from '@/hooks/useJobStats';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Users, UserPlus, Search, CheckCircle, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -8,6 +9,7 @@ import { cn } from '@/lib/utils';
 interface ApplicantFunnelProps {
   activeFilter: ApplicantFilter;
   onFilterChange: (filter: ApplicantFilter) => void;
+  timeFilter?: TimeFilter;
 }
 
 const funnelSteps: {
@@ -60,8 +62,8 @@ const funnelSteps: {
   },
 ];
 
-export function ApplicantFunnel({ activeFilter, onFilterChange }: ApplicantFunnelProps) {
-  const { data, isLoading } = useApplicantFunnelCounts();
+export function ApplicantFunnel({ activeFilter, onFilterChange, timeFilter = 'all' }: ApplicantFunnelProps) {
+  const { data, isLoading } = useApplicantFunnelCounts(timeFilter);
 
   if (isLoading) {
     return (

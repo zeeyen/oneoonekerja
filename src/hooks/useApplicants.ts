@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { Applicant } from '@/types/database';
+import { type TimeFilter, getSinceDate } from '@/hooks/useJobStats';
 
 export type ApplicantFilter = 'all' | 'active' | 'completed' | 'in_progress' | 'matching' | 'new' | 'banned' | 'has_violations';
 
@@ -9,6 +10,7 @@ interface UseApplicantsOptions {
   filter: ApplicantFilter;
   page: number;
   pageSize: number;
+  timeFilter?: TimeFilter;
 }
 
 interface ApplicantsResult {
@@ -22,10 +24,17 @@ async function fetchApplicants({
   filter,
   page,
   pageSize,
+  timeFilter = 'all',
 }: UseApplicantsOptions): Promise<ApplicantsResult> {
+  const since = getSinceDate(timeFilter);
   let query = supabase
     .from('applicants')
     .select('*', { count: 'exact' });
+
+  // Apply time filter
+  if (since) {
+    query = query.gte('last_active_at', since);
+  }
 
   // Apply search filter
   if (search.trim()) {
@@ -86,8 +95,10 @@ async function fetchApplicants({
 
 export async function fetchAllFilteredApplicants(
   search: string,
-  filter: ApplicantFilter
+  filter: ApplicantFilter,
+  timeFilter: TimeFilter = 'all'
 ): Promise<Applicant[]> {
+  const since = getSinceDate(timeFilter);
   const allResults: Applicant[] = [];
   const chunkSize = 1000;
   let from = 0;
@@ -95,6 +106,10 @@ export async function fetchAllFilteredApplicants(
 
   while (hasMore) {
     let query = supabase.from('applicants').select('*');
+
+    if (since) {
+      query = query.gte('last_active_at', since);
+    }
 
     if (search.trim()) {
       const searchTerm = `%${search.trim()}%`;
