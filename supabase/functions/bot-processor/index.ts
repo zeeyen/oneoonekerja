@@ -363,6 +363,86 @@ function formatJobSelectionsMessage(selections: JobSelection[], lang: string): s
 }
 
 // ============================================
+// INTENT CLASSIFICATION
+// ============================================
+type UserIntent = 'data_response' | 'question' | 'confusion' | 'job_preference' | 'greeting' | 'other'
+
+async function classifyIntent(
+  message: string,
+  currentStep: string,
+  lang: string
+): Promise<{ intent: UserIntent, confidence: number }> {
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `Classify the user's intent. They are currently in step '${currentStep}' of a job-finding WhatsApp chatbot in Malaysia. The bot collects name, age, gender, and location.
+
+Return ONLY JSON: {"intent": "...", "confidence": 0.0-1.0}
+
+Intents:
+- "data_response": User is providing personal info (name, age, gender, location) as requested. Includes comma-separated data like "Ali, 25, lelaki, KL". Also includes single-field answers like just a name, age number, or location.
+- "question": User is asking about jobs, the process, what the bot does, salary, requirements, etc.
+- "confusion": User is confused, frustrated, doesn't understand, says things like "apa ni", "tak faham", "huh", expresses frustration.
+- "job_preference": User is expressing what kind of work they want, industry preference, salary expectations. E.g. "nak kerja warehouse", "minat F&B".
+- "greeting": Casual greeting, "hi", "hello", "assalamualaikum", acknowledgment like "ok", "noted".
+- "other": Anything else.
+
+Important: If the message contains structured data (name + age + gender + location pattern), ALWAYS classify as "data_response" regardless of other content.
+If the message is just a number, classify as "data_response".
+If message is in Malay, English, or Chinese - classify based on meaning, not language.`
+          },
+          { role: 'user', content: message }
+        ],
+        max_tokens: 50,
+        temperature: 0
+      })
+    })
+
+    const result = await response.json()
+    const content = result.choices?.[0]?.message?.content?.trim() || '{}'
+    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0])
+      console.log(`🧠 Intent: ${parsed.intent} (${parsed.confidence}) for "${message.substring(0, 40)}..."`)
+      return { intent: parsed.intent || 'other', confidence: parsed.confidence || 0.5 }
+    }
+  } catch (error) {
+    console.error('Intent classification error:', error)
+  }
+  return { intent: 'data_response', confidence: 0.5 } // Default: treat as data
+}
+
+// ============================================
+// CONVERSATION HISTORY BUFFER
+// ============================================
+interface RecentMessage {
+  role: 'bot' | 'user'
+  content: string
+}
+
+function addToRecentMessages(
+  convState: Record<string, any>,
+  userMsg: string,
+  botMsg: string
+): RecentMessage[] {
+  const recent: RecentMessage[] = convState.recent_messages || []
+  recent.push({ role: 'user', content: userMsg.substring(0, 200) })
+  recent.push({ role: 'bot', content: botMsg.substring(0, 200) })
+  // Keep only last 3 turns (6 entries)
+  while (recent.length > 6) recent.shift()
+  return recent
+}
+
+// ============================================
 // SESSION EXPIRED MESSAGES
 // ============================================
 const SESSION_EXPIRED_MESSAGES = {
@@ -1517,12 +1597,58 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
       break
 
     // ========== STEP 2: COLLECT ALL INFO ==========
-    case 'collect_info':
+    case 'collect_info': {
       console.log('📝 collect_info: Starting extraction...')
 
       // Check conversation state FIRST to determine what to extract
       const convState = user.conversation_state || {}
       const isLocationClarification = convState.location_clarification_pending || convState.ambiguous_location_pending
+      const recentMsgs: RecentMessage[] = convState.recent_messages || []
+
+      // === INTENT CLASSIFICATION (skip if in clarification mode) ===
+      if (!isLocationClarification && !convState.ambiguous_location_pending) {
+        const { intent, confidence } = await classifyIntent(message, 'collect_info', lang)
+
+        if (intent !== 'data_response' && confidence > 0.6) {
+          // Determine what info is still missing
+          const currentInfo: ExtractedInfo = {
+            name: updatedUser.full_name || null,
+            age: updatedUser.age || null,
+            gender: updatedUser.gender || null,
+            city: updatedUser.location_city || null,
+            state: updatedUser.location_state || null,
+            lat: updatedUser.latitude || null,
+            lng: updatedUser.longitude || null
+          }
+          const missingNow = getMissingFields(currentInfo)
+          const missingText = missingNow.map(m => m === 'name' ? 'nama' : m === 'age' ? 'umur' : m === 'gender' ? 'lelaki/perempuan' : 'lokasi').join(', ')
+
+          let contextForGPT = ''
+          if (intent === 'question') {
+            contextForGPT = `User is asking a question during onboarding. They still need to provide: ${missingNow.join(', ')}. Answer their question naturally and briefly, then gently remind them to provide the missing info. Keep it short (2-3 lines max).`
+          } else if (intent === 'confusion') {
+            contextForGPT = `User seems confused or frustrated during onboarding. They still need: ${missingNow.join(', ')}. Be empathetic, simplify the request. Ask for just ONE piece of info at a time. For example: "Takpe, satu-satu ye. Nama adik apa?" Keep it very short and warm.`
+          } else if (intent === 'job_preference') {
+            contextForGPT = `User is expressing a job preference (e.g., wanting warehouse work, F&B, etc.). Acknowledge their preference warmly, then remind them you need: ${missingNow.join(', ')} before you can find matching jobs. Keep it short.`
+          } else if (intent === 'greeting') {
+            contextForGPT = `User sent a greeting. Respond warmly and briefly, then re-ask for the missing info: ${missingNow.join(', ')}. Keep it natural and short.`
+          } else {
+            contextForGPT = `User sent a message that doesn't contain the requested info. They still need to provide: ${missingNow.join(', ')}. Gently redirect them. Keep it short.`
+          }
+
+          const gptResponse = await generateKakAniResponse(user, message, contextForGPT, recentMsgs)
+
+          // Track conversation history
+          const updatedRecent = addToRecentMessages(convState, message, gptResponse)
+          const newState = { ...convState, recent_messages: updatedRecent }
+          await supabase.from('applicants').update({
+            conversation_state: newState,
+            updated_at: new Date().toISOString()
+          }).eq('id', user.id)
+
+          return { response: gptResponse, updatedUser: { ...user, conversation_state: newState } }
+        }
+      }
 
       const extracted = await extractAllInfo(message, lang)
       console.log('📝 collect_info: Extracted:', JSON.stringify(extracted))
@@ -1811,6 +1937,7 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
         response = askForMissingInfo(missing, lang, mergedInfo)
       }
       break
+    }
 
     // ========== STEP: UPDATE LOCATION ONLY ==========
     case 'update_location':
@@ -2619,7 +2746,10 @@ async function handleCompletedUserConversational(
 
   const lang = user.preferred_language || 'ms'
   const firstName = user.full_name?.split(' ')[0] || ''
+  const convState = user.conversation_state || {}
+  const recentMsgs: RecentMessage[] = convState.recent_messages || []
 
+  // Check explicit keyword-based job search intent first
   const wantsSearch = await detectJobSearchIntent(message, lang)
 
   if (wantsSearch) {
@@ -2644,6 +2774,55 @@ async function handleCompletedUserConversational(
         : result.message,
       updatedUser
     }
+  }
+
+  // === INTENT CLASSIFICATION for implicit job search or questions ===
+  const { intent } = await classifyIntent(message, 'completed', lang)
+
+  if (intent === 'job_preference') {
+    // User expressing interest in a type of work → treat as implicit job search
+    // Try to extract location if mentioned
+    const extracted = await extractAllInfo(message, lang)
+    if (extracted.city && extracted.lat && extracted.lng) {
+      // Update location and search
+      user.location_city = extracted.city
+      user.location_state = extracted.state || user.location_state
+      user.latitude = extracted.lat
+      user.longitude = extracted.lng
+    }
+
+    const result = await findAndPresentJobsConversational(user)
+    const updatedUser = {
+      ...user,
+      onboarding_status: 'matching',
+      conversation_state: buildPostSearchState(result)
+    }
+    await updateUserInDB(user.id, updatedUser, 'viewing_jobs')
+
+    const jobCount = result.jobs.length
+    return {
+      response: jobCount > 0
+        ? getText(lang, {
+            ms: `Ok, Kak Ani faham! Jumpa ${jobCount} kerja yang mungkin sesuai:\n\n${result.message}`,
+            en: `Got it! Found ${jobCount} jobs that might match:\n\n${result.message}`,
+            zh: `好的！找到${jobCount}个可能合适的工作：\n\n${result.message}`
+          })
+        : result.message,
+      updatedUser
+    }
+  }
+
+  if (intent === 'question') {
+    const ctx = `User has completed onboarding and is asking a question. Their profile: name=${user.full_name}, location=${user.location_city}, ${user.location_state}. Answer their question helpfully and briefly. If it's about finding jobs, tell them to say "cari kerja" or "find job". Keep it short.`
+    const gptResp = await generateKakAniResponse(user, message, ctx, recentMsgs)
+
+    const updatedRecent = addToRecentMessages(convState, message, gptResp)
+    await supabase.from('applicants').update({
+      conversation_state: { ...convState, recent_messages: updatedRecent },
+      updated_at: new Date().toISOString()
+    }).eq('id', user.id)
+
+    return { response: gptResp, updatedUser: { ...user, conversation_state: { ...convState, recent_messages: updatedRecent } } }
   }
 
   const response = getText(lang, {
@@ -2833,7 +3012,42 @@ ms: `Best! Adik pilih:\n\n*${displayTitle}* di *${selectedJob.company}*\n📍 ${
     }
   }
 
-  // Invalid input - show help
+  // === INTENT CLASSIFICATION before fallback ===
+  const recentMsgsMatch: RecentMessage[] = convState.recent_messages || []
+  const { intent: matchIntent } = await classifyIntent(message, 'matching', lang)
+
+  if (matchIntent === 'question') {
+    // User asking about a job - provide context from matched jobs
+    const jobsSummary = matchedJobs.slice(currentIndex, currentIndex + 3)
+      .map((j, i) => `${currentIndex + i + 1}. ${j.title} at ${j.company} (${j.location_city})`).join('\n')
+    const ctx = `User is viewing jobs and asking a question. Current jobs shown:\n${jobsSummary}\n\nAnswer their question using the job info above. Then remind them to reply with a number (${pageStart}-${pageEnd}) to apply or 'lagi'/'more' for more options. Keep it short.`
+    const gptResp = await generateKakAniResponse(user, message, ctx, recentMsgsMatch)
+
+    const updatedRecent = addToRecentMessages(convState, message, gptResp)
+    const newState = { ...convState, recent_messages: updatedRecent }
+    await supabase.from('applicants').update({
+      conversation_state: newState,
+      updated_at: new Date().toISOString()
+    }).eq('id', user.id)
+
+    return { response: gptResp, updatedUser: { ...user, conversation_state: newState } }
+  }
+
+  if (matchIntent === 'job_preference') {
+    const ctx = `User is expressing a job preference while viewing job listings. Acknowledge their preference. Then remind them to pick a job number (${pageStart}-${pageEnd}) from the current list, say 'lagi'/'more' for more, or 'semula'/'restart' to search with different criteria. Keep it short.`
+    const gptResp = await generateKakAniResponse(user, message, ctx, recentMsgsMatch)
+
+    const updatedRecent = addToRecentMessages(convState, message, gptResp)
+    const newState = { ...convState, recent_messages: updatedRecent }
+    await supabase.from('applicants').update({
+      conversation_state: newState,
+      updated_at: new Date().toISOString()
+    }).eq('id', user.id)
+
+    return { response: gptResp, updatedUser: { ...user, conversation_state: newState } }
+  }
+
+  // Default fallback - show help
   const response = getText(lang, {
     ms: `Balas nombor (${pageStart}-${pageEnd}) untuk memohon, atau 'lagi' untuk pilihan lain.`,
     en: `Reply with a number (${pageStart}-${pageEnd}) to apply, or 'more' for more options.`,
@@ -3210,14 +3424,26 @@ async function updateUserInDB(userId: string, user: User, nextStep: string) {
 async function generateKakAniResponse(
   user: User,
   userMessage: string,
-  contextInstruction: string
+  contextInstruction: string,
+  recentMessages?: RecentMessage[]
 ): Promise<string> {
 
   const messages: GPTMessage[] = [
     { role: 'system', content: KAK_ANI_SYSTEM_PROMPT },
-    { role: 'system', content: `Context: ${contextInstruction}` },
-    { role: 'user', content: userMessage }
+    { role: 'system', content: `Context: ${contextInstruction}` }
   ]
+
+  // Inject conversation history for multi-turn context
+  if (recentMessages && recentMessages.length > 0) {
+    for (const msg of recentMessages) {
+      messages.push({
+        role: msg.role === 'bot' ? 'assistant' : 'user',
+        content: msg.content
+      })
+    }
+  }
+
+  messages.push({ role: 'user', content: userMessage })
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
