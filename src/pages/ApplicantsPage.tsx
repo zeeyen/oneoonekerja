@@ -41,7 +41,6 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { useDebounce } from '@/hooks/useDebounce';
 import { toast } from 'sonner';
 import type { Applicant } from '@/types/database';
-import { type TimeFilter, getSinceDate } from '@/hooks/useJobStats';
 
 const PAGE_SIZE = 20;
 
@@ -60,10 +59,8 @@ export default function ApplicantsPage() {
   const [page, setPage] = useState(1);
   const [banDialogApplicant, setBanDialogApplicant] = useState<Applicant | null>(null);
   const [isExporting, setIsExporting] = useState(false);
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
 
   const debouncedSearch = useDebounce(searchInput, 300);
-  const since = getSinceDate(timeFilter);
 
   const { data: totalCount } = useTotalApplicantsCount();
   const { data, isLoading, isError, refetch } = useApplicants({
@@ -71,13 +68,12 @@ export default function ApplicantsPage() {
     filter,
     page,
     pageSize: PAGE_SIZE,
-    since,
   });
 
   // Reset to page 1 when search or filter changes
   useMemo(() => {
     setPage(1);
-  }, [debouncedSearch, filter, timeFilter]);
+  }, [debouncedSearch, filter]);
 
   const formatLocation = (city: string | null, state: string | null) => {
     if (city && state) return `${city}, ${state}`;
@@ -148,7 +144,7 @@ export default function ApplicantsPage() {
   const handleExportCsv = useCallback(async () => {
     setIsExporting(true);
     try {
-      const applicants = await fetchAllFilteredApplicants(debouncedSearch, filter, since);
+      const applicants = await fetchAllFilteredApplicants(debouncedSearch, filter);
       
       const headers = ['Name', 'Phone', 'IC Number', 'City', 'State', 'Status', 'Violations', 'Last Active', 'Created'];
       const rows = applicants.map((a) => [
@@ -178,7 +174,7 @@ export default function ApplicantsPage() {
     } finally {
       setIsExporting(false);
     }
-  }, [debouncedSearch, filter, isAdmin, since]);
+  }, [debouncedSearch, filter, isAdmin]);
 
   const renderPagination = () => {
     if (!data || data.totalPages <= 1) return null;
@@ -245,26 +241,7 @@ export default function ApplicantsPage() {
       </div>
 
       {/* Funnel Widget */}
-      <ApplicantFunnel activeFilter={filter} onFilterChange={setFilter} since={since} />
-
-      {/* Time Filter */}
-      <div className="flex gap-2">
-        {([
-          { value: '24h', label: 'Last 24h' },
-          { value: '7d', label: '7 days' },
-          { value: '1m', label: '1 month' },
-          { value: 'all', label: 'All time' },
-        ] as const).map((opt) => (
-          <Button
-            key={opt.value}
-            variant={timeFilter === opt.value ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setTimeFilter(opt.value)}
-          >
-            {opt.label}
-          </Button>
-        ))}
-      </div>
+      <ApplicantFunnel activeFilter={filter} onFilterChange={setFilter} />
 
       {/* Search and CSV Export */}
       <Card className="shadow-sm">

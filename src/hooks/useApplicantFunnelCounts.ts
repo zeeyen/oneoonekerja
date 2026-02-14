@@ -10,33 +10,29 @@ export interface FunnelCounts {
   total: number;
 }
 
-async function fetchFunnelCounts(since: string | null): Promise<FunnelCounts> {
+async function fetchFunnelCounts(): Promise<FunnelCounts> {
   const statuses = ['new', 'in_progress', 'matching', 'completed'] as const;
 
-  const countPromises = statuses.map((status) => {
-    let q = supabase
+  const countPromises = statuses.map((status) =>
+    supabase
       .from('applicants')
       .select('*', { count: 'exact', head: true })
-      .eq('onboarding_status', status);
-    if (since) q = q.gte('last_active_at', since);
-    return q;
-  });
+      .eq('onboarding_status', status)
+  );
 
   // Banned count
-  let bannedQuery = supabase
+  const bannedPromise = supabase
     .from('applicants')
     .select('*', { count: 'exact', head: true })
     .not('banned_until', 'is', null)
     .gt('banned_until', new Date().toISOString());
-  if (since) bannedQuery = bannedQuery.gte('last_active_at', since);
 
-  let totalQuery = supabase
+  const totalPromise = supabase
     .from('applicants')
     .select('*', { count: 'exact', head: true });
-  if (since) totalQuery = totalQuery.gte('last_active_at', since);
 
   const [newRes, inProgressRes, matchingRes, completedRes, bannedRes, totalRes] =
-    await Promise.all([...countPromises, bannedQuery, totalQuery]);
+    await Promise.all([...countPromises, bannedPromise, totalPromise]);
 
   return {
     new: newRes.count ?? 0,
@@ -48,10 +44,10 @@ async function fetchFunnelCounts(since: string | null): Promise<FunnelCounts> {
   };
 }
 
-export function useApplicantFunnelCounts(since: string | null = null) {
+export function useApplicantFunnelCounts() {
   return useQuery({
-    queryKey: ['applicant-funnel-counts', since],
-    queryFn: () => fetchFunnelCounts(since),
+    queryKey: ['applicant-funnel-counts'],
+    queryFn: fetchFunnelCounts,
     staleTime: 30000,
   });
 }

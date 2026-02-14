@@ -8,7 +8,6 @@ import { cn } from '@/lib/utils';
 interface ApplicantFunnelProps {
   activeFilter: ApplicantFilter;
   onFilterChange: (filter: ApplicantFilter) => void;
-  since?: string | null;
 }
 
 const funnelSteps: {
@@ -61,8 +60,8 @@ const funnelSteps: {
   },
 ];
 
-export function ApplicantFunnel({ activeFilter, onFilterChange, since = null }: ApplicantFunnelProps) {
-  const { data, isLoading } = useApplicantFunnelCounts(since);
+export function ApplicantFunnel({ activeFilter, onFilterChange }: ApplicantFunnelProps) {
+  const { data, isLoading } = useApplicantFunnelCounts();
 
   if (isLoading) {
     return (
