@@ -461,6 +461,13 @@ export type Database = {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["admin_role"]
       }
+      get_job_match_counts: {
+        Args: { since_ts?: string }
+        Returns: {
+          job_id: string
+          match_count: number
+        }[]
+      }
       has_dashboard_access: { Args: { _user_id: string }; Returns: boolean }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
     }
