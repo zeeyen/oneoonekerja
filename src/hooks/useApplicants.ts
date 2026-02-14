@@ -9,6 +9,7 @@ interface UseApplicantsOptions {
   filter: ApplicantFilter;
   page: number;
   pageSize: number;
+  since?: string | null;
 }
 
 interface ApplicantsResult {
@@ -22,10 +23,15 @@ async function fetchApplicants({
   filter,
   page,
   pageSize,
+  since,
 }: UseApplicantsOptions): Promise<ApplicantsResult> {
   let query = supabase
     .from('applicants')
     .select('*', { count: 'exact' });
+
+  if (since) {
+    query = query.gte('last_active_at', since);
+  }
 
   // Apply search filter
   if (search.trim()) {
@@ -86,7 +92,8 @@ async function fetchApplicants({
 
 export async function fetchAllFilteredApplicants(
   search: string,
-  filter: ApplicantFilter
+  filter: ApplicantFilter,
+  since?: string | null
 ): Promise<Applicant[]> {
   const allResults: Applicant[] = [];
   const chunkSize = 1000;
@@ -95,6 +102,10 @@ export async function fetchAllFilteredApplicants(
 
   while (hasMore) {
     let query = supabase.from('applicants').select('*');
+
+    if (since) {
+      query = query.gte('last_active_at', since);
+    }
 
     if (search.trim()) {
       const searchTerm = `%${search.trim()}%`;
