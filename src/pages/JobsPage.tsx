@@ -8,6 +8,7 @@ import {
   INDUSTRY_OPTIONS,
   type JobStatusFilter,
 } from '@/hooks/useJobs';
+import { useJobMatchCounts, useJobSelectionCounts, type TimeFilter } from '@/hooks/useJobStats';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorFallback } from '@/components/ErrorFallback';
 import { TooltipHeader } from '@/components/TooltipHeader';
@@ -41,7 +42,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
-import { Search, Briefcase, ExternalLink, Upload, MapPin } from 'lucide-react';
+import { Search, Briefcase, ExternalLink, Upload, MapPin, BarChart3, MousePointerClick } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 import { useDebounce } from '@/hooks/useDebounce';
 
@@ -53,6 +54,15 @@ const statusFilterOptions: { value: JobStatusFilter; label: string }[] = [
   { value: 'expired', label: 'Expired' },
 ];
 
+const timeFilterOptions: { value: TimeFilter; label: string }[] = [
+  { value: '24h', label: 'Last 24h' },
+  { value: '7d', label: '7 days' },
+  { value: '1m', label: '1 month' },
+  { value: 'all', label: 'All time' },
+];
+
+type ActiveWidget = null | 'matched' | 'selected';
+
 export default function JobsPage() {
   const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState('');
@@ -61,6 +71,8 @@ export default function JobsPage() {
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [activeWidget, setActiveWidget] = useState<ActiveWidget>(null);
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
 
   const { data: unresolvedCount } = useUnresolvedJobsCount();
   const { run: runBackfill, isRunning: isBackfilling, progress: backfillProgress } = useBackfillGeocode();
@@ -77,6 +89,36 @@ export default function JobsPage() {
     pageSize: PAGE_SIZE,
   });
 
+  const { data: matchCounts, isLoading: matchLoading } = useJobMatchCounts(timeFilter);
+  const { data: selectionCounts, isLoading: selectionLoading } = useJobSelectionCounts(timeFilter);
+
+  const matchedTotal = matchCounts?.length ?? 0;
+  const selectedTotal = selectionCounts?.length ?? 0;
+
+  // Build lookup maps for counts
+  const matchCountMap = useMemo(() => {
+    const map = new Map<string, number>();
+    matchCounts?.forEach((r) => map.set(r.job_id, r.count));
+    return map;
+  }, [matchCounts]);
+
+  const selectionCountMap = useMemo(() => {
+    const map = new Map<string, number>();
+    selectionCounts?.forEach((r) => map.set(r.job_id, r.count));
+    return map;
+  }, [selectionCounts]);
+
+  // When a widget is active, sort jobs by count descending and filter to only jobs with counts
+  const displayJobs = useMemo(() => {
+    if (!data?.jobs) return [];
+    if (!activeWidget) return data.jobs;
+
+    const countMap = activeWidget === 'matched' ? matchCountMap : selectionCountMap;
+    return [...data.jobs]
+      .filter((job) => countMap.has(job.id))
+      .sort((a, b) => (countMap.get(b.id) || 0) - (countMap.get(a.id) || 0));
+  }, [data?.jobs, activeWidget, matchCountMap, selectionCountMap]);
+
   // Reset to page 1 when filters change
   useMemo(() => {
     setPage(1);
@@ -91,8 +133,12 @@ export default function JobsPage() {
     return isPast(parseISO(expireBy));
   };
 
+  const handleWidgetClick = (widget: 'matched' | 'selected') => {
+    setActiveWidget((prev) => (prev === widget ? null : widget));
+  };
+
   const renderPagination = () => {
-    if (!data || data.totalPages <= 1) return null;
+    if (!data || data.totalPages <= 1 || activeWidget) return null;
 
     const pages = [];
     const maxVisiblePages = 5;
@@ -193,11 +239,75 @@ export default function JobsPage() {
 
       <BulkImportJobsModal open={bulkImportOpen} onOpenChange={setBulkImportOpen} />
 
+      {/* Stat Widgets */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Card
+          className={`shadow-sm cursor-pointer transition-all hover:shadow-md ${
+            activeWidget === 'matched'
+              ? 'ring-2 ring-primary border-primary'
+              : ''
+          }`}
+          onClick={() => handleWidgetClick('matched')}
+        >
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <BarChart3 className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Jobs Matched</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {matchLoading ? <Skeleton className="h-8 w-16 inline-block" /> : matchedTotal}
+                </p>
+                <p className="text-xs text-muted-foreground">unique jobs matched to applicants</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className={`shadow-sm cursor-pointer transition-all hover:shadow-md ${
+            activeWidget === 'selected'
+              ? 'ring-2 ring-primary border-primary'
+              : ''
+          }`}
+          onClick={() => handleWidgetClick('selected')}
+        >
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <MousePointerClick className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Jobs Selected</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {selectionLoading ? <Skeleton className="h-8 w-16 inline-block" /> : selectedTotal}
+                </p>
+                <p className="text-xs text-muted-foreground">unique jobs selected by applicants</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Time Filter */}
+      <div className="flex gap-2">
+        {timeFilterOptions.map((opt) => (
+          <Button
+            key={opt.value}
+            variant={timeFilter === opt.value ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setTimeFilter(opt.value)}
+          >
+            {opt.label}
+          </Button>
+        ))}
+      </div>
+
       {/* Search and Filters */}
       <Card className="shadow-sm">
         <CardContent className="pt-6">
           <div className="flex flex-col gap-4">
-            {/* Search bar */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -208,7 +318,6 @@ export default function JobsPage() {
               />
             </div>
 
-            {/* Filter row */}
             <div className="flex flex-col sm:flex-row gap-3">
               <Select
                 value={statusFilter}
@@ -275,7 +384,7 @@ export default function JobsPage() {
               message="We couldn't load the job list. Please try again."
               onRetry={() => refetch()}
             />
-          ) : data && data.jobs.length > 0 ? (
+          ) : displayJobs.length > 0 ? (
             <>
               <div className="table-responsive">
                 <div className="rounded-md border min-w-[800px]">
@@ -286,29 +395,36 @@ export default function JobsPage() {
                         <TableHead>Title</TableHead>
                         <TableHead>Company</TableHead>
                         <TableHead>
-                          <TooltipHeader 
-                            label="Location" 
-                            tooltip="Job location used for distance-based matching with applicants" 
+                          <TooltipHeader
+                            label="Location"
+                            tooltip="Job location used for distance-based matching with applicants"
                           />
                         </TableHead>
                         <TableHead>Industry</TableHead>
                         <TableHead>
-                          <TooltipHeader 
-                            label="Salary" 
-                            tooltip="Displayed to applicants during job matching" 
+                          <TooltipHeader
+                            label="Salary"
+                            tooltip="Displayed to applicants during job matching"
                           />
                         </TableHead>
                         <TableHead>
-                          <TooltipHeader 
-                            label="Expires" 
-                            tooltip="Job automatically hidden from search results after this date" 
+                          <TooltipHeader
+                            label="Expires"
+                            tooltip="Job automatically hidden from search results after this date"
                           />
                         </TableHead>
+                        {activeWidget && (
+                          <TableHead className="text-right">
+                            {activeWidget === 'matched' ? 'Times Matched' : 'Times Selected'}
+                          </TableHead>
+                        )}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {data.jobs.map((job) => {
+                      {displayJobs.map((job) => {
                         const expired = isJobExpired(job.expire_by);
+                        const countMap = activeWidget === 'matched' ? matchCountMap : selectionCountMap;
+                        const count = activeWidget ? countMap.get(job.id) : undefined;
                         return (
                           <TableRow
                             key={job.id}
@@ -362,6 +478,11 @@ export default function JobsPage() {
                             >
                               {format(parseISO(job.expire_by), 'dd MMM yyyy')}
                             </TableCell>
+                            {activeWidget && (
+                              <TableCell className="text-right font-semibold">
+                                {count ?? 0}
+                              </TableCell>
+                            )}
                           </TableRow>
                         );
                       })}
@@ -371,22 +492,31 @@ export default function JobsPage() {
               </div>
 
               {/* Pagination info and controls */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
-                <p className="text-sm text-muted-foreground">
-                  Showing {(page - 1) * PAGE_SIZE + 1} to{' '}
-                  {Math.min(page * PAGE_SIZE, data.totalCount)} of {data.totalCount} jobs
+              {!activeWidget && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {(page - 1) * PAGE_SIZE + 1} to{' '}
+                    {Math.min(page * PAGE_SIZE, data!.totalCount)} of {data!.totalCount} jobs
+                  </p>
+                  {renderPagination()}
+                </div>
+              )}
+              {activeWidget && (
+                <p className="text-sm text-muted-foreground mt-4">
+                  Showing {displayJobs.length} jobs with {activeWidget === 'matched' ? 'matches' : 'selections'}
                 </p>
-                {renderPagination()}
-              </div>
+              )}
             </>
           ) : (
             <EmptyState
               type="jobs"
               title="No jobs found"
               description={
-                searchInput || statusFilter !== 'all' || industryFilter !== 'all' || stateFilter !== 'all'
-                  ? 'Try adjusting your search or filters.'
-                  : 'No jobs have been added yet.'
+                activeWidget
+                  ? `No jobs have been ${activeWidget === 'matched' ? 'matched' : 'selected'} in this time period.`
+                  : searchInput || statusFilter !== 'all' || industryFilter !== 'all' || stateFilter !== 'all'
+                    ? 'Try adjusting your search or filters.'
+                    : 'No jobs have been added yet.'
               }
             />
           )}
