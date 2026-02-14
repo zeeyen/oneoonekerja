@@ -36,11 +36,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Search, Users as UsersIcon, AlertTriangle, Download, Loader2 } from 'lucide-react';
+import { Search, Users as UsersIcon, AlertTriangle, Download, Loader2, Clock } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useDebounce } from '@/hooks/useDebounce';
 import { toast } from 'sonner';
 import type { Applicant } from '@/types/database';
+import { type TimeFilter } from '@/hooks/useJobStats';
 
 const PAGE_SIZE = 20;
 
@@ -56,6 +57,7 @@ export default function ApplicantsPage() {
   const { isAdmin } = useAdmin();
   const [searchInput, setSearchInput] = useState('');
   const [filter, setFilter] = useState<ApplicantFilter>('all');
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
   const [page, setPage] = useState(1);
   const [banDialogApplicant, setBanDialogApplicant] = useState<Applicant | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -68,12 +70,13 @@ export default function ApplicantsPage() {
     filter,
     page,
     pageSize: PAGE_SIZE,
+    timeFilter,
   });
 
-  // Reset to page 1 when search or filter changes
+  // Reset to page 1 when search, filter, or time filter changes
   useMemo(() => {
     setPage(1);
-  }, [debouncedSearch, filter]);
+  }, [debouncedSearch, filter, timeFilter]);
 
   const formatLocation = (city: string | null, state: string | null) => {
     if (city && state) return `${city}, ${state}`;
@@ -144,7 +147,7 @@ export default function ApplicantsPage() {
   const handleExportCsv = useCallback(async () => {
     setIsExporting(true);
     try {
-      const applicants = await fetchAllFilteredApplicants(debouncedSearch, filter);
+      const applicants = await fetchAllFilteredApplicants(debouncedSearch, filter, timeFilter);
       
       const headers = ['Name', 'Phone', 'IC Number', 'City', 'State', 'Status', 'Violations', 'Last Active', 'Created'];
       const rows = applicants.map((a) => [
@@ -174,7 +177,7 @@ export default function ApplicantsPage() {
     } finally {
       setIsExporting(false);
     }
-  }, [debouncedSearch, filter, isAdmin]);
+  }, [debouncedSearch, filter, timeFilter, isAdmin]);
 
   const renderPagination = () => {
     if (!data || data.totalPages <= 1) return null;
@@ -241,7 +244,30 @@ export default function ApplicantsPage() {
       </div>
 
       {/* Funnel Widget */}
-      <ApplicantFunnel activeFilter={filter} onFilterChange={setFilter} />
+      <ApplicantFunnel activeFilter={filter} onFilterChange={setFilter} timeFilter={timeFilter} />
+
+      {/* Time Filter */}
+      <div className="flex items-center gap-2">
+        <Clock className="h-4 w-4 text-muted-foreground" />
+        <div className="flex gap-1 rounded-lg border bg-card p-1">
+          {([
+            { value: '24h', label: 'Last 24h' },
+            { value: '7d', label: '7 days' },
+            { value: '1m', label: '1 month' },
+            { value: 'all', label: 'All time' },
+          ] as const).map((option) => (
+            <Button
+              key={option.value}
+              variant={timeFilter === option.value ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setTimeFilter(option.value)}
+              className="text-xs"
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
+      </div>
 
       {/* Search and CSV Export */}
       <Card className="shadow-sm">
