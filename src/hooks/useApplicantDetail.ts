@@ -6,6 +6,18 @@ export interface JobMatchWithJob extends JobMatch {
   job?: Pick<Job, 'title' | 'company'>;
 }
 
+export interface JobSelection {
+  id: string;
+  user_id: string | null;
+  job_id: string | null;
+  job_title: string;
+  company: string | null;
+  location_city: string | null;
+  location_state: string | null;
+  apply_url: string | null;
+  selected_at: string | null;
+}
+
 async function fetchApplicantById(id: string): Promise<Applicant | null> {
   const { data, error } = await supabase
     .from('applicants')
@@ -100,5 +112,28 @@ export function useApplicantConversations(applicantId: string, phoneNumber?: str
     queryKey: ['applicant-conversations', applicantId, phoneNumber],
     queryFn: () => fetchApplicantConversations(applicantId, phoneNumber),
     enabled: !!applicantId || !!phoneNumber,
+  });
+}
+
+async function fetchApplicantJobSelections(userId: string): Promise<JobSelection[]> {
+  const { data, error } = await supabase
+    .from('job_selections')
+    .select('*')
+    .eq('user_id', userId)
+    .order('selected_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching job selections:', error);
+    return [];
+  }
+
+  return data ?? [];
+}
+
+export function useApplicantJobSelections(applicantId: string) {
+  return useQuery({
+    queryKey: ['applicant-job-selections', applicantId],
+    queryFn: () => fetchApplicantJobSelections(applicantId),
+    enabled: !!applicantId,
   });
 }

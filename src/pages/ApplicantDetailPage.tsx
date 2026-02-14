@@ -2,7 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { PhoneLink } from '@/components/PhoneLink';
 import {
   useApplicantDetail,
-  useApplicantJobMatches,
+  useApplicantJobSelections,
   useApplicantConversations,
 } from '@/hooks/useApplicantDetail';
 import { useAdminActions } from '@/hooks/useModeration';
@@ -34,6 +34,7 @@ import {
   MessageSquare,
   CheckCircle,
   XCircle,
+  ExternalLink,
   Download,
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -57,7 +58,7 @@ export default function ApplicantDetailPage() {
   const navigate = useNavigate();
 
   const { data: applicant, isLoading: applicantLoading } = useApplicantDetail(id!);
-  const { data: jobMatches, isLoading: matchesLoading } = useApplicantJobMatches(id!);
+  const { data: jobSelections, isLoading: selectionsLoading } = useApplicantJobSelections(id!);
   const { data: conversations, isLoading: conversationsLoading } = useApplicantConversations(
     id!,
     applicant?.phone_number
@@ -292,66 +293,60 @@ export default function ApplicantDetailPage() {
       <ModerationHistory actions={adminActions} isLoading={actionsLoading} />
 
       {/* Tabs */}
-      <Tabs defaultValue="matches" className="space-y-4">
+      <Tabs defaultValue="selections" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="matches">Job Matches</TabsTrigger>
+          <TabsTrigger value="selections">Job Selections</TabsTrigger>
           <TabsTrigger value="conversations">Conversation History</TabsTrigger>
         </TabsList>
 
-        {/* Job Matches Tab */}
-        <TabsContent value="matches">
+        {/* Job Selections Tab */}
+        <TabsContent value="selections">
           <Card className="shadow-sm">
             <CardContent className="pt-6">
-              {matchesLoading ? (
+              {selectionsLoading ? (
                 <div className="space-y-3">
                   {[...Array(3)].map((_, i) => (
                     <Skeleton key={i} className="h-12 w-full" />
                   ))}
                 </div>
-              ) : jobMatches && jobMatches.length > 0 ? (
+              ) : jobSelections && jobSelections.length > 0 ? (
                 <div className="rounded-md border">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Job Title</TableHead>
                         <TableHead>Company</TableHead>
-                        <TableHead>Match Score</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Date</TableHead>
+                        <TableHead>Location</TableHead>
+                        <TableHead>Apply Link</TableHead>
+                        <TableHead>Selected At</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {jobMatches.map((match) => (
-                        <TableRow key={match.id}>
+                      {jobSelections.map((sel) => (
+                        <TableRow key={sel.id}>
                           <TableCell className="font-medium">
-                            {match.job?.title || 'Unknown Job'}
+                            {sel.job_title}
                           </TableCell>
                           <TableCell>
-                            {match.job?.company || '-'}
+                            {sel.company || '-'}
                           </TableCell>
                           <TableCell>
-                            {match.match_score !== null ? (
-                              <span className="font-mono">{match.match_score.toFixed(1)}%</span>
-                            ) : (
-                              '-'
-                            )}
+                            {[sel.location_city, sel.location_state].filter(Boolean).join(', ') || '-'}
                           </TableCell>
                           <TableCell>
-                            <Badge
-                              variant={
-                                match.status === 'accepted'
-                                  ? 'default'
-                                  : match.status === 'rejected'
-                                  ? 'destructive'
-                                  : 'secondary'
-                              }
-                              className="capitalize"
-                            >
-                              {match.status}
-                            </Badge>
+                            {sel.apply_url ? (
+                              <a
+                                href={sel.apply_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-primary hover:underline text-sm"
+                              >
+                                Open <ExternalLink className="h-3 w-3" />
+                              </a>
+                            ) : '-'}
                           </TableCell>
                           <TableCell className="text-muted-foreground text-sm">
-                            {format(new Date(match.created_at), 'dd MMM yyyy')}
+                            {sel.selected_at ? format(new Date(sel.selected_at), 'dd MMM yyyy, HH:mm') : '-'}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -361,7 +356,7 @@ export default function ApplicantDetailPage() {
               ) : (
                 <div className="flex flex-col items-center justify-center py-12">
                   <Briefcase className="h-8 w-8 text-muted-foreground mb-2" />
-                  <p className="text-muted-foreground">No job matches yet</p>
+                  <p className="text-muted-foreground">No job selections yet</p>
                 </div>
               )}
             </CardContent>
