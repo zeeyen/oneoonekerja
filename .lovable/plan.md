@@ -1,42 +1,41 @@
 
 
-## Backfill `job_type` for Existing Jobs
+## Add Job Type Filter and Display Job Type + Job ID on Detail Page
 
-This is a data-only update -- no code changes needed. We will run SQL UPDATE statements to set the `job_type` column for all 181 jobs using their `external_job_id` (JOB003 through JOB193).
+### 1. Jobs Page -- Add `job_type` filter dropdown
 
-### What will happen
+Add a new Select dropdown (alongside the existing Status, Industry, State filters) with options:
+- All Types (default)
+- Freelance
+- Long Term
 
-A single SQL UPDATE using a VALUES list will match each `external_job_id` to its `job_type` from the CSV and update the `jobs` table. The two values are:
+**Files changed:**
+- `src/pages/JobsPage.tsx` -- Add `jobTypeFilter` state, render a new Select dropdown, pass it to `useJobs`
+- `src/hooks/useJobs.ts` -- Accept `jobTypeFilter` in `UseJobsOptions`, apply `.eq('job_type', ...)` filter when not "all"
 
-- **Freelance** -- ~120 jobs
-- **Long Term** -- ~61 jobs
+### 2. Job Detail Page -- Show Job ID and Job Type
 
-### SQL approach
+Add two new fields to the Job Details card:
+- **Job ID** (e.g. "JOB130") -- display `job.external_job_id` with a tag/hash icon
+- **Job Type** (e.g. "Freelance") -- display `job.job_type` with a briefcase icon
 
-```text
-UPDATE jobs AS j
-SET job_type = v.job_type
-FROM (VALUES
-  ('JOB003', 'Freelance'),
-  ('JOB004', 'Freelance'),
-  ('JOB005', 'Long Term'),
-  ... (all 181 rows)
-  ('JOB193', 'Freelance')
-) AS v(external_job_id, job_type)
-WHERE j.external_job_id = v.external_job_id;
-```
+These will be added to the existing details grid alongside Salary, Location, Industry, etc.
 
-### Scope
+**File changed:**
+- `src/pages/JobDetailPage.tsx` -- Add Job ID and Job Type fields in the details grid. Also show the external_job_id in the header area next to the title for quick reference.
 
-| Item | Detail |
-|---|---|
-| Records updated | ~181 jobs |
-| Column affected | `job_type` (text, already exists) |
-| Matching key | `external_job_id` |
-| Code changes | None |
-| Risk | Very low -- single column update, no schema change |
+### Technical Details
 
-### Verification
+**`src/hooks/useJobs.ts`**
+- Add `jobTypeFilter: string` to `UseJobsOptions`
+- Add filter: `if (jobTypeFilter && jobTypeFilter !== 'all') { query = query.eq('job_type', jobTypeFilter); }`
 
-After running the update, we will query the table to confirm all jobs have their `job_type` populated correctly.
+**`src/pages/JobsPage.tsx`**
+- New state: `const [jobTypeFilter, setJobTypeFilter] = useState<string>('all');`
+- New Select dropdown after the State filter with options: All Types, Freelance, Long Term
+- Pass `jobTypeFilter` to `useJobs()`
+- Reset page on filter change (already handled by existing useMemo)
 
+**`src/pages/JobDetailPage.tsx`**
+- In the header card, show `external_job_id` as a muted badge/text next to the title
+- In the details grid left column, add Job Type field showing `job.job_type || 'Not specified'`
