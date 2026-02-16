@@ -1,41 +1,33 @@
 
 
-## Add Job Type Filter and Display Job Type + Job ID on Detail Page
+## Add `job_type` to Bot's Job Knowledge
 
-### 1. Jobs Page -- Add `job_type` filter dropdown
+When applicants ask "Is this freelance?", "Part time ke?", or "这是全职吗？", the bot currently can't answer because `job_type` is not included in the job data passed to the AI. This plan fixes that.
 
-Add a new Select dropdown (alongside the existing Status, Industry, State filters) with options:
-- All Types (default)
-- Freelance
-- Long Term
+### Changes (1 file)
 
-**Files changed:**
-- `src/pages/JobsPage.tsx` -- Add `jobTypeFilter` state, render a new Select dropdown, pass it to `useJobs`
-- `src/hooks/useJobs.ts` -- Accept `jobTypeFilter` in `UseJobsOptions`, apply `.eq('job_type', ...)` filter when not "all"
+**`supabase/functions/bot-processor/index.ts`**
 
-### 2. Job Detail Page -- Show Job ID and Job Type
+1. **Add `job_type` to `MatchedJob` interface** (~line 242)
+   - Add `job_type?: string` field
 
-Add two new fields to the Job Details card:
-- **Job ID** (e.g. "JOB130") -- display `job.external_job_id` with a tag/hash icon
-- **Job Type** (e.g. "Freelance") -- display `job.job_type` with a briefcase icon
+2. **Include `job_type` in job mapping** (~line 3291-3302)
+   - When building `topJobs` from query results, include `job_type: s.job.job_type`
 
-These will be added to the existing details grid alongside Salary, Location, Industry, etc.
+3. **Include `job_type` in the question-answering context** (~line 3019-3023)
+   - Update the `jobsSummary` string to include job type info
+   - Change from: `{title} at {company} ({location})`
+   - Change to: `{title} at {company} ({location}, Type: {job_type || 'Not specified'})`
 
-**File changed:**
-- `src/pages/JobDetailPage.tsx` -- Add Job ID and Job Type fields in the details grid. Also show the external_job_id in the header area next to the title for quick reference.
+4. **Include `job_type` in the formatted job card** (~line 3373-3384)
+   - Add a line showing job type (e.g., "Jenis: Freelance") in the job listing message so users can see it upfront
 
-### Technical Details
+### What this enables
 
-**`src/hooks/useJobs.ts`**
-- Add `jobTypeFilter: string` to `UseJobsOptions`
-- Add filter: `if (jobTypeFilter && jobTypeFilter !== 'all') { query = query.eq('job_type', jobTypeFilter); }`
+- When a user asks "Is job 1 freelance?", GPT will have the `job_type` data in its context and can answer accurately
+- Job cards displayed to users will show the type (Freelance / Long Term) so they know before asking
+- Works in all 3 languages (BM, EN, ZH)
 
-**`src/pages/JobsPage.tsx`**
-- New state: `const [jobTypeFilter, setJobTypeFilter] = useState<string>('all');`
-- New Select dropdown after the State filter with options: All Types, Freelance, Long Term
-- Pass `jobTypeFilter` to `useJobs()`
-- Reset page on filter change (already handled by existing useMemo)
+### Technical detail
 
-**`src/pages/JobDetailPage.tsx`**
-- In the header card, show `external_job_id` as a muted badge/text next to the title
-- In the details grid left column, add Job Type field showing `job.job_type || 'Not specified'`
+The `select('*')` query already fetches `job_type` from the database. The data just needs to be carried through to the `MatchedJob` objects and included in the GPT context string.
