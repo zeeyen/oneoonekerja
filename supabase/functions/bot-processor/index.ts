@@ -495,9 +495,18 @@ serve(async (req) => {
   }
 
   try {
-    // Note: META_APP_SECRET validation removed — the upstream webhook handler
-    // already validates the Meta webhook signature. This internal endpoint
-    // is called by our own webhook handler, not directly by Meta.
+    // Validate shared secret to ensure only our webhook handler calls this endpoint
+    const META_APP_SECRET = Deno.env.get('META_APP_SECRET')
+    if (!META_APP_SECRET) {
+      console.error('❌ META_APP_SECRET not configured — refusing to process requests')
+      return jsonResponse({ reply: 'Service unavailable', action: 'send_message' }, 503)
+    }
+
+    const incomingSecret = req.headers.get('x-bot-secret')
+    if (incomingSecret !== META_APP_SECRET) {
+      console.warn('⚠️ Invalid or missing x-bot-secret header')
+      return new Response('Unauthorized', { status: 401 })
+    }
 
     const { user, message, messageType, locationData }: ProcessRequest = await req.json()
 
