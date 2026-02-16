@@ -250,6 +250,7 @@ interface MatchedJob {
   industry?: string
   distance?: number
   external_job_id?: string
+  job_type?: string
 }
 
 interface JobSelection {
@@ -3019,7 +3020,7 @@ ms: `Best! Adik pilih:\n\n*${displayTitle}* di *${selectedJob.company}*\n📍 ${
   if (matchIntent === 'question') {
     // User asking about a job - provide context from matched jobs
     const jobsSummary = matchedJobs.slice(currentIndex, currentIndex + 3)
-      .map((j, i) => `${currentIndex + i + 1}. ${j.title} at ${j.company} (${j.location_city})`).join('\n')
+      .map((j, i) => `${currentIndex + i + 1}. ${j.title} at ${j.company} (${j.location_city}, Type: ${j.job_type || 'Not specified'})`).join('\n')
     const ctx = `User is viewing jobs and asking a question. Current jobs shown:\n${jobsSummary}\n\nAnswer their question using the job info above. Then remind them to reply with a number (${pageStart}-${pageEnd}) to apply or 'lagi'/'more' for more options. Keep it short.`
     const gptResp = await generateKakAniResponse(user, message, ctx, recentMsgsMatch)
 
@@ -3298,7 +3299,8 @@ async function findAndPresentJobsConversational(user: User, radiusKm: number = 1
     url: s.job.url,
     industry: s.job.industry,
     distance: Math.round(s.distance),
-    external_job_id: s.job.external_job_id
+    external_job_id: s.job.external_job_id,
+    job_type: s.job.job_type
   }))
 
   const message = formatJobsMessage(topJobs, 0, lang)
@@ -3380,7 +3382,12 @@ function formatJobsMessage(jobs: MatchedJob[], startIndex: number, language: str
     message += `*${jobNumber}. ${displayTitle}*\n`
     message += `🏢 ${job.company}\n`
     message += `📍 ${l.location}: ${location}\n`
-    message += `💰 ${l.salary}: ${salary}\n\n`
+    message += `💰 ${l.salary}: ${salary}\n`
+    if (job.job_type) {
+      const typeLabel = getText(language, { ms: 'Jenis', en: 'Type', zh: '类型' })
+      message += `📋 ${typeLabel}: ${job.job_type}\n`
+    }
+    message += `\n`
   })
 
   message += l.reply(firstJobNumber, lastJobNumber, hasMore)
