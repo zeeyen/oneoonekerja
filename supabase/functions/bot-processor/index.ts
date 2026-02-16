@@ -390,7 +390,7 @@ Return ONLY JSON: {"intent": "...", "confidence": 0.0-1.0}
 
 Intents:
 - "data_response": User is providing personal info (name, age, gender, location) as requested. Includes comma-separated data like "Ali, 25, lelaki, KL". Also includes single-field answers like just a name, age number, or location.
-- "question": User is asking about jobs, the process, what the bot does, salary, requirements, etc.
+- "question": User is asking about jobs, the process, what the bot does, salary, requirements, working hours, benefits, EPF, SOCSO, transport, etc. This includes casual employment queries like "berapa gaji?", "full time ke part time?", "kerja ni macam mana?", "ada EPF tak?", even if they don't look like formal questions.
 - "confusion": User is confused, frustrated, doesn't understand, says things like "apa ni", "tak faham", "huh", expresses frustration.
 - "job_preference": User is expressing what kind of work they want, industry preference, salary expectations. E.g. "nak kerja warehouse", "minat F&B".
 - "greeting": Casual greeting, "hi", "hello", "assalamualaikum", acknowledgment like "ok", "noted".
@@ -1297,6 +1297,59 @@ async function processWithKakAni(
     return await handleRestart(user)
   }
 
+  // === FOLLOW-UP OFFERED CHECK ===
+  const convStateCheck = user.conversation_state || {}
+  if (convStateCheck.follow_up_offered) {
+    const lower = message.toLowerCase().trim()
+    const isYes = /^(ya|yes|ok|okay|1|是|boleh|nak|want|yep|yup|sure|mahu)$/i.test(lower)
+    const isNo = /^(tidak|tak|no|2|不|不是|nope|nah|taknak|don't|takpe|nevermind)$/i.test(lower)
+
+    if (isYes) {
+      const lang = user.preferred_language || 'ms'
+      const newConvState = { ...convStateCheck, follow_up_offered: false }
+      delete newConvState.follow_up_question
+      
+      await supabase.from('applicants').update({
+        onboarding_status: 'follow_up',
+        conversation_state: newConvState,
+        updated_at: new Date().toISOString()
+      }).eq('id', user.id)
+
+      const confirmMsg = getText(lang, {
+        ms: `Baik, Kak Ani dah catatkan. Team kami akan hubungi adik secepat mungkin ye.\n\nKalau nak cari kerja lagi, cakap je "cari kerja".`,
+        en: `Noted! Our team will reach out to you as soon as possible.\n\nIf you want to search for more jobs, just say "find job".`,
+        zh: `好的，已记录！我们的团队会尽快联系您。\n\n如果想继续找工作，说"找工作"就行。`
+      })
+
+      return { response: confirmMsg, updatedUser: { ...user, onboarding_status: 'follow_up', conversation_state: newConvState } }
+    } else if (isNo) {
+      const lang = user.preferred_language || 'ms'
+      const newConvState = { ...convStateCheck, follow_up_offered: false }
+      delete newConvState.follow_up_question
+
+      await supabase.from('applicants').update({
+        conversation_state: newConvState,
+        updated_at: new Date().toISOString()
+      }).eq('id', user.id)
+
+      const noMsg = getText(lang, {
+        ms: `Takpe, takde masalah! Nak cari kerja baru? Cakap je "cari kerja".`,
+        en: `No problem! Want to search for new jobs? Just say "find job".`,
+        zh: `没问题！想找新工作吗？说"找工作"就行。`
+      })
+
+      return { response: noMsg, updatedUser: { ...user, conversation_state: newConvState } }
+    }
+    // If neither yes nor no, clear the flag and continue normal flow
+    const newConvState = { ...convStateCheck, follow_up_offered: false }
+    delete newConvState.follow_up_question
+    user.conversation_state = newConvState
+    await supabase.from('applicants').update({
+      conversation_state: newConvState,
+      updated_at: new Date().toISOString()
+    }).eq('id', user.id)
+  }
+
   switch (user.onboarding_status) {
     case 'new':
       return await handleNewUserConversational(user)
@@ -1305,6 +1358,7 @@ async function processWithKakAni(
       return await handleOnboardingConversational(user, message, step)
 
     case 'completed':
+    case 'follow_up':
       return await handleCompletedUserConversational(user, message)
 
     case 'matching':
@@ -2812,17 +2866,92 @@ async function handleCompletedUserConversational(
     }
   }
 
-  if (intent === 'question') {
-    const ctx = `User has completed onboarding and is asking a question. Their profile: name=${user.full_name}, location=${user.location_city}, ${user.location_state}. Answer their question helpfully and briefly. If it's about finding jobs, tell them to say "cari kerja" or "find job". Keep it short.`
-    const gptResp = await generateKakAniResponse(user, message, ctx, recentMsgs)
+  if (intent === 'question' || intent === 'other' || intent === 'greeting' || intent === 'confusion') {
+    // Fetch job context for enriched answering
+    const selections = await getUserJobSelections(user.id, 5)
+    const matchedJobs: MatchedJob[] = convState.matched_jobs || []
 
-    const updatedRecent = addToRecentMessages(convState, message, gptResp)
-    await supabase.from('applicants').update({
-      conversation_state: { ...convState, recent_messages: updatedRecent },
-      updated_at: new Date().toISOString()
-    }).eq('id', user.id)
+    const jobContext = selections.length > 0
+      ? selections.map(s => `- ${s.job_title} at ${s.company || 'N/A'}, ${s.location_city || ''} ${s.location_state || ''}, URL: ${s.apply_url || 'N/A'}`).join('\n')
+      : matchedJobs.slice(0, 5).map(j => `- ${j.title} at ${j.company}, ${j.location_city}${j.salary_range ? ', Salary: ' + j.salary_range : ''}`).join('\n')
 
-    return { response: gptResp, updatedUser: { ...user, conversation_state: { ...convState, recent_messages: updatedRecent } } }
+    const ctx = `You are Kak Ani, an employment agency staff member for 101Kerja. The user has completed onboarding and is chatting.
+
+User profile: name=${user.full_name}, location=${user.location_city}, ${user.location_state}.
+
+${jobContext ? `Jobs the user has selected or been matched with:\n${jobContext}` : 'No job selections or matches available.'}
+
+INSTRUCTIONS:
+- If the user asks an employment-related question (salary, job type, working hours, requirements, location, benefits, EPF, SOCSO, transport, etc.), answer using the job data above if relevant.
+- Respond as a helpful employment agency kakak, not as an AI.
+- If you have enough info to answer meaningfully, do so.
+- If the question is about something NOT in the provided data (e.g. specific company policies, EPF details, interview dates), you CANNOT answer it.
+- If the user is just greeting or making conversation, respond warmly and remind them they can say "cari kerja" to search for more jobs.
+- Keep responses short and natural.
+
+IMPORTANT: Return your response as JSON: {"answer": "your response here", "can_answer": true/false}
+- can_answer = true: You have enough info to answer meaningfully OR it's a greeting/casual chat
+- can_answer = false: The question requires specific info you don't have`
+
+    try {
+      const gptRespRaw = await generateKakAniResponse(user, message, ctx, recentMsgs)
+
+      // Try to parse structured response
+      let answer: string
+      let canAnswer = true
+      try {
+        const jsonMatch = gptRespRaw.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          answer = parsed.answer || gptRespRaw
+          canAnswer = parsed.can_answer !== false
+        } else {
+          answer = gptRespRaw
+        }
+      } catch {
+        answer = gptRespRaw
+      }
+
+      if (!canAnswer) {
+        // Offer follow-up escalation
+        const followUpOffer = getText(lang, {
+          ms: `${answer}\n\nKak Ani tak ada maklumat tu. Nak Kak Ani minta team kami hubungi adik pasal ni?`,
+          en: `${answer}\n\nI don't have that specific information. Would you like someone from our team to contact you about this?`,
+          zh: `${answer}\n\n我没有这个具体信息。您希望我们的团队联系您吗？`
+        })
+
+        const updatedRecent = addToRecentMessages(convState, message, followUpOffer)
+        const newConvState = {
+          ...convState,
+          recent_messages: updatedRecent,
+          follow_up_offered: true,
+          follow_up_question: message
+        }
+        await supabase.from('applicants').update({
+          conversation_state: newConvState,
+          updated_at: new Date().toISOString()
+        }).eq('id', user.id)
+
+        return { response: followUpOffer, updatedUser: { ...user, conversation_state: newConvState } }
+      }
+
+      const updatedRecent = addToRecentMessages(convState, message, answer)
+      await supabase.from('applicants').update({
+        conversation_state: { ...convState, recent_messages: updatedRecent },
+        updated_at: new Date().toISOString()
+      }).eq('id', user.id)
+
+      return { response: answer, updatedUser: { ...user, conversation_state: { ...convState, recent_messages: updatedRecent } } }
+    } catch (error) {
+      console.error('Error in enriched question handler:', error)
+      // Fallback
+      const fallback = getText(lang, {
+        ms: `Hai ${firstName}!\n\nNak cari kerja baru? Cakap je "cari kerja" dan Kak Ani tolong carikan.`,
+        en: `Hi ${firstName}!\n\nWant to find a new job? Just say "find job" and I'll help you search.`,
+        zh: `你好 ${firstName}！\n\n想找新工作吗？说"找工作"，我帮你找。`
+      })
+      return { response: fallback, updatedUser: user }
+    }
   }
 
   const response = getText(lang, {
