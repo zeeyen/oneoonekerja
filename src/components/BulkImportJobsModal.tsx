@@ -248,6 +248,7 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
                     <TableHead className="w-12">#</TableHead>
                     <TableHead>Job ID</TableHead>
                     <TableHead>Title</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead>Company</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead className="w-16">Geo</TableHead>
@@ -274,6 +275,7 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
                       <TableCell className="font-medium max-w-[200px] truncate">
                         {row.raw.job_title || <span className="text-muted-foreground italic">empty</span>}
                       </TableCell>
+                      <TableCell className="text-sm">{row.raw.job_type || '-'}</TableCell>
                       <TableCell className="max-w-[150px] truncate">{row.raw.company_name || '-'}</TableCell>
                       <TableCell className="text-sm">
                         {row.raw.city || row.raw.state
