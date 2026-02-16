@@ -69,6 +69,7 @@ export default function JobsPage() {
   const [statusFilter, setStatusFilter] = useState<JobStatusFilter>('all');
   const [industryFilter, setIndustryFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
+  const [jobTypeFilter, setJobTypeFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [activeWidget, setActiveWidget] = useState<ActiveWidget>(null);
@@ -85,6 +86,7 @@ export default function JobsPage() {
     statusFilter,
     industryFilter,
     stateFilter,
+    jobTypeFilter,
     page,
     pageSize: PAGE_SIZE,
   });
@@ -122,7 +124,7 @@ export default function JobsPage() {
   // Reset to page 1 when filters change
   useMemo(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, industryFilter, stateFilter]);
+  }, [debouncedSearch, statusFilter, industryFilter, stateFilter, jobTypeFilter]);
 
   const formatLocation = (city: string | null, state: string | null) => {
     if (city && state) return `${city}, ${state}`;
@@ -363,6 +365,17 @@ export default function JobsPage() {
                       {state}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={jobTypeFilter} onValueChange={setJobTypeFilter}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Job Type" />
+                </SelectTrigger>
+                <SelectContent className="bg-background border shadow-lg z-50">
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="Freelance">Freelance</SelectItem>
+                  <SelectItem value="Long Term">Long Term</SelectItem>
                 </SelectContent>
               </Select>
             </div>
