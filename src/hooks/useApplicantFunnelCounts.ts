@@ -7,14 +7,13 @@ export interface FunnelCounts {
   in_progress: number;
   matching: number;
   completed: number;
-  follow_up: number;
   banned: number;
   total: number;
 }
 
 async function fetchFunnelCounts(timeFilter: TimeFilter): Promise<FunnelCounts> {
   const since = getSinceDate(timeFilter);
-  const statuses = ['new', 'in_progress', 'matching', 'completed', 'follow_up'] as const;
+  const statuses = ['new', 'in_progress', 'matching', 'completed'] as const;
 
   const countPromises = statuses.map((status) => {
     let q = supabase
@@ -38,7 +37,7 @@ async function fetchFunnelCounts(timeFilter: TimeFilter): Promise<FunnelCounts> 
     .select('*', { count: 'exact', head: true });
   if (since) totalQuery = totalQuery.gte('last_active_at', since);
 
-  const [newRes, inProgressRes, matchingRes, completedRes, followUpRes, bannedRes, totalRes] =
+  const [newRes, inProgressRes, matchingRes, completedRes, bannedRes, totalRes] =
     await Promise.all([...countPromises, bannedQuery, totalQuery]);
 
   return {
@@ -46,7 +45,6 @@ async function fetchFunnelCounts(timeFilter: TimeFilter): Promise<FunnelCounts> 
     in_progress: inProgressRes.count ?? 0,
     matching: matchingRes.count ?? 0,
     completed: completedRes.count ?? 0,
-    follow_up: followUpRes.count ?? 0,
     banned: bannedRes.count ?? 0,
     total: totalRes.count ?? 0,
   };

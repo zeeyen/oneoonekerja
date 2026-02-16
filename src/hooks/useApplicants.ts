@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import type { Applicant } from '@/types/database';
 import { type TimeFilter, getSinceDate } from '@/hooks/useJobStats';
 
-export type ApplicantFilter = 'all' | 'active' | 'completed' | 'in_progress' | 'matching' | 'new' | 'banned' | 'has_violations' | 'follow_up';
+export type ApplicantFilter = 'all' | 'active' | 'completed' | 'in_progress' | 'matching' | 'new' | 'banned' | 'has_violations';
 
 interface UseApplicantsOptions {
   search: string;
@@ -60,9 +60,6 @@ async function fetchApplicants({
       break;
     case 'matching':
       query = query.eq('onboarding_status', 'matching');
-      break;
-    case 'follow_up':
-      query = query.eq('onboarding_status', 'follow_up');
       break;
     case 'banned':
       query = query
@@ -136,9 +133,6 @@ export async function fetchAllFilteredApplicants(
         break;
       case 'matching':
         query = query.eq('onboarding_status', 'matching');
-        break;
-      case 'follow_up':
-        query = query.eq('onboarding_status', 'follow_up');
         break;
       case 'banned':
         query = query

@@ -24,10 +24,6 @@ export const onboardingStatusConfig: Record<OnboardingStatus, StatusConfig> = {
     label: 'Completed',
     className: 'bg-green-100 text-green-800 hover:bg-green-100 border-green-200',
   },
-  follow_up: {
-    label: 'Follow-Up',
-    className: 'bg-orange-100 text-orange-800 hover:bg-orange-100 border-orange-200',
-  },
 };
 
 export const bannedStatusConfig: StatusConfig = {

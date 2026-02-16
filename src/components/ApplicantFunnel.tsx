@@ -3,7 +3,7 @@ import type { FunnelCounts } from '@/hooks/useApplicantFunnelCounts';
 import { useApplicantFunnelCounts } from '@/hooks/useApplicantFunnelCounts';
 import type { TimeFilter } from '@/hooks/useJobStats';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Users, UserPlus, Search, CheckCircle, Ban, PhoneForwarded } from 'lucide-react';
+import { Users, UserPlus, Search, CheckCircle, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ApplicantFunnelProps {
@@ -53,14 +53,6 @@ const funnelSteps: {
     activeClass: 'ring-2 ring-green-400 border-green-400 bg-green-100',
   },
   {
-    key: 'follow_up',
-    filterValue: 'follow_up',
-    label: 'Follow-Up',
-    icon: PhoneForwarded,
-    colorClass: 'border-orange-200 bg-orange-50 text-orange-700',
-    activeClass: 'ring-2 ring-orange-400 border-orange-400 bg-orange-100',
-  },
-  {
     key: 'banned',
     filterValue: 'banned',
     label: 'Banned',
@@ -75,8 +67,8 @@ export function ApplicantFunnel({ activeFilter, onFilterChange, timeFilter = 'al
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
-        {[...Array(7)].map((_, i) => (
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {[...Array(6)].map((_, i) => (
           <Skeleton key={i} className="h-20 rounded-lg" />
         ))}
       </div>
@@ -86,7 +78,7 @@ export function ApplicantFunnel({ activeFilter, onFilterChange, timeFilter = 'al
   if (!data) return null;
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
       {/* All card */}
       <button
         onClick={() => onFilterChange('all')}

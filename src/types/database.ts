@@ -18,7 +18,7 @@ export interface Applicant {
   transport_type: string | null;
   is_oku: boolean | null;
   availability: Record<string, boolean> | null;
-  onboarding_status: 'new' | 'in_progress' | 'matching' | 'completed' | 'follow_up';
+  onboarding_status: 'new' | 'in_progress' | 'matching' | 'completed';
   onboarding_step: string | null;
   conversation_state: Record<string, unknown>;
   is_active: boolean;
