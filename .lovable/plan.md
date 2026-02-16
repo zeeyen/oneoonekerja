@@ -1,55 +1,42 @@
 
 
-## Update Bulk Import to Support New CSV Format
+## Backfill `job_type` for Existing Jobs
 
-### What Changed in the CSV
+This is a data-only update -- no code changes needed. We will run SQL UPDATE statements to set the `job_type` column for all 181 jobs using their `external_job_id` (JOB003 through JOB193).
 
-The new CSV adds one column: **`job_type`** (position 4, between `job_title` and `company_name`). Values include `"Freelance"` and `"Long Term"`. Everything else is identical to the current format.
+### What will happen
 
-Other observations:
-- `wages_per_day` uses `-` for empty values (already handled by existing code)
-- `end_date` uses `YYYY-MM-DD` format (already supported)
-- No other structural changes
+A single SQL UPDATE using a VALUES list will match each `external_job_id` to its `job_type` from the CSV and update the `jobs` table. The two values are:
 
-### Changes Required
+- **Freelance** -- ~120 jobs
+- **Long Term** -- ~61 jobs
 
-**1. Database Migration -- Add `job_type` column to `jobs` table**
+### SQL approach
 
-Add a text column (not the old integer-based one) to store values like "Freelance", "Long Term", etc.
-
-```sql
-ALTER TABLE public.jobs ADD COLUMN job_type text;
+```text
+UPDATE jobs AS j
+SET job_type = v.job_type
+FROM (VALUES
+  ('JOB003', 'Freelance'),
+  ('JOB004', 'Freelance'),
+  ('JOB005', 'Long Term'),
+  ... (all 181 rows)
+  ('JOB193', 'Freelance')
+) AS v(external_job_id, job_type)
+WHERE j.external_job_id = v.external_job_id;
 ```
 
-**2. `src/hooks/useBulkImportJobs.ts`**
+### Scope
 
-- Add `job_type: string` to `CsvRow` interface
-- Add `'job_type'` to `CSV_HEADERS` array (after `job_title`)
-- In `importRows`, include `job_type` in the insert record: map the CSV value to the DB column
-- In `updateExistingRows`, optionally detect and update `job_type` changes for existing jobs
-- In `detectLocationChanges`, consider adding `job_type` comparison (or rename the function to `detectChanges`)
-
-**3. `src/types/database.ts`**
-
-- Add `job_type: string | null` to the `Job` interface
-
-**4. `src/components/BulkImportJobsModal.tsx`**
-
-- No structural changes needed -- the table preview already shows title, company, location, etc.
-- Optionally add a "Type" column to the preview table to show Freelance/Long Term
-
-**5. Template download**
-
-- The `generateCsvTemplate()` function will automatically include `job_type` since it uses `CSV_HEADERS`
-
-### Summary
-
-| File | Change |
+| Item | Detail |
 |---|---|
-| DB migration | Add `job_type text` column to `jobs` |
-| `src/hooks/useBulkImportJobs.ts` | Add `job_type` to CsvRow, CSV_HEADERS, insert/update logic |
-| `src/types/database.ts` | Add `job_type` to Job interface |
-| `src/components/BulkImportJobsModal.tsx` | Optionally show job type in preview table |
+| Records updated | ~181 jobs |
+| Column affected | `job_type` (text, already exists) |
+| Matching key | `external_job_id` |
+| Code changes | None |
+| Risk | Very low -- single column update, no schema change |
 
-This is a small, low-risk change -- just one new column flowing through the existing pipeline.
+### Verification
+
+After running the update, we will query the table to confirm all jobs have their `job_type` populated correctly.
 
