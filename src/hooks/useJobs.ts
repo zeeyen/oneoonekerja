@@ -9,6 +9,7 @@ interface UseJobsOptions {
   statusFilter: JobStatusFilter;
   industryFilter: string;
   stateFilter: string;
+  jobTypeFilter: string;
   page: number;
   pageSize: number;
 }
@@ -55,6 +56,7 @@ async function fetchJobs({
   statusFilter,
   industryFilter,
   stateFilter,
+  jobTypeFilter,
   page,
   pageSize,
 }: UseJobsOptions): Promise<JobsResult> {
@@ -82,6 +84,11 @@ async function fetchJobs({
   // Apply state filter
   if (stateFilter && stateFilter !== 'all') {
     query = query.eq('location_state', stateFilter);
+  }
+
+  // Apply job type filter
+  if (jobTypeFilter && jobTypeFilter !== 'all') {
+    query = query.eq('job_type', jobTypeFilter);
   }
 
   // Order and paginate

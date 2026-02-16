@@ -26,6 +26,8 @@ import {
   ExternalLink,
   Briefcase,
   Pencil,
+  Hash,
+  Tag,
 } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 import { JobEditForm, type JobEditFormData } from '@/components/JobEditForm';
@@ -185,7 +187,14 @@ export default function JobDetailPage() {
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-foreground">{job.title}</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold text-foreground">{job.title}</h1>
+                {job.external_job_id && (
+                  <span className="text-sm font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                    {job.external_job_id}
+                  </span>
+                )}
+              </div>
               {job.company && (
                 <p className="text-lg text-muted-foreground mt-1">{job.company}</p>
               )}
@@ -258,6 +267,13 @@ export default function JobDetailPage() {
                     Industry
                   </label>
                   <p className="mt-1">{job.industry || 'Not specified'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <Tag className="h-4 w-4" />
+                    Job Type
+                  </label>
+                  <p className="mt-1">{job.job_type || 'Not specified'}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">
