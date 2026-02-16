@@ -343,6 +343,7 @@ export type Database = {
           gender_requirement: string | null
           id: string
           industry: string | null
+          job_type: string | null
           last_edited_at: string | null
           last_edited_by: string | null
           latitude: number | null
@@ -367,6 +368,7 @@ export type Database = {
           gender_requirement?: string | null
           id?: string
           industry?: string | null
+          job_type?: string | null
           last_edited_at?: string | null
           last_edited_by?: string | null
           latitude?: number | null
@@ -391,6 +393,7 @@ export type Database = {
           gender_requirement?: string | null
           id?: string
           industry?: string | null
+          job_type?: string | null
           last_edited_at?: string | null
           last_edited_by?: string | null
           latitude?: number | null

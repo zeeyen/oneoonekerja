@@ -8,6 +8,7 @@ export interface CsvRow {
   id: string;
   job_id: string;
   job_title: string;
+  job_type: string;
   company_name: string;
   location: string;
   postcode: string;
@@ -34,6 +35,7 @@ export interface ExistingJobData {
   location_city: string | null;
   location_state: string | null;
   url: string | null;
+  job_type: string | null;
 }
 
 export interface ParsedRow {
@@ -59,7 +61,7 @@ interface MalaysiaLocation {
 }
 
 const CSV_HEADERS = [
-  'id', 'job_id', 'job_title', 'company_name', 'location', 'postcode',
+  'id', 'job_id', 'job_title', 'job_type', 'company_name', 'location', 'postcode',
   'city', 'state', 'country', 'salary_range', 'wages_per_month', 'wages_per_day',
   'gender_requirement', 'url', 'created_at', 'end_date', 'age_min', 'age_max',
 ] as const;
@@ -224,7 +226,7 @@ async function fetchExistingJobs(): Promise<Map<string, ExistingJobData>> {
   while (true) {
     const { data, error } = await supabase
       .from('jobs')
-      .select('id, external_job_id, location_address, postcode, location_city, location_state, url')
+      .select('id, external_job_id, location_address, postcode, location_city, location_state, url, job_type')
       .not('external_job_id', 'is', null)
       .range(from, from + pageSize - 1);
     if (error || !data || data.length === 0) break;
@@ -237,6 +239,7 @@ async function fetchExistingJobs(): Promise<Map<string, ExistingJobData>> {
           location_city: row.location_city,
           location_state: row.location_state,
           url: row.url,
+          job_type: row.job_type,
         });
       }
     }
@@ -260,6 +263,7 @@ function detectLocationChanges(raw: CsvRow, existing: ExistingJobData): string[]
   if (normalizeForCompare(cleanNull(raw.city)) !== normalizeForCompare(existing.location_city)) changes.push('city');
   if (normalizeForCompare(cleanNull(raw.state)) !== normalizeForCompare(existing.location_state)) changes.push('state');
   if (normalizeForCompare(cleanNull(raw.url)) !== normalizeForCompare(existing.url)) changes.push('url');
+  if (normalizeForCompare(cleanNull(raw.job_type)) !== normalizeForCompare(existing.job_type)) changes.push('job_type');
   return changes;
 }
 
@@ -409,6 +413,7 @@ export function useBulkImportJobs() {
               location_city: cleanNull(row.raw.city) || null,
               location_state: cleanNull(row.raw.state) || null,
               url: cleanNull(row.raw.url) || null,
+              job_type: cleanNull(row.raw.job_type) || null,
               latitude: row.latitude,
               longitude: row.longitude,
               last_edited_at: new Date().toISOString(),
@@ -472,6 +477,7 @@ export function useBulkImportJobs() {
               min_experience_years: 0,
               expire_by: convertDate(r.raw.end_date)!,
               url: cleanNull(r.raw.url) || null,
+              job_type: cleanNull(r.raw.job_type) || null,
               last_edited_at: new Date().toISOString(),
               last_edited_by: user?.id ?? null,
             };
