@@ -2920,7 +2920,15 @@ async function handleMatchingConversational(
       })
       return { response: resp, updatedUser: { ...user, onboarding_status: 'completed', conversation_state: {} } }
     }
-    // If neither yes nor no, fall through to normal handling
+    // Unrecognized reply -- gently re-ask the yes/no question
+    const currentRadius = convState.current_radius || 10
+    const nextRadius = currentRadius < 20 ? 20 : 50
+    const reaskResp = getText(lang, {
+      ms: `Maaf, Kak Ani tak faham. Nak cari kerja dalam radius ${nextRadius}km?\n\nBalas 'ya' atau 'tidak'.`,
+      en: `Sorry, I didn't understand. Search within ${nextRadius}km?\n\nReply 'yes' or 'no'.`,
+      zh: `抱歉，我没听懂。要搜索${nextRadius}公里内的工作吗？\n\n回复"是"或"不是"。`
+    })
+    return { response: reaskResp, updatedUser: user }
   }
 
   // Handle edge case: no jobs in state (user may have arrived here incorrectly)
@@ -2930,7 +2938,11 @@ async function handleMatchingConversational(
     // If user says "cari kerja" or similar, immediately trigger a new search
     if (await detectJobSearchIntent(message, lang)) {
       console.log('🔍 Job search intent detected in matching state with no jobs, triggering new search')
-      const searchResult = await findAndPresentJobsConversational(user)
+      // Use previous radius context to avoid repeating a failed radius
+      const lastRadius = convState.current_radius || convState.last_search_radius || 10
+      const searchRadius = lastRadius < 20 ? 20 : (lastRadius < 50 ? 50 : 10)
+      console.log(`🔍 Using radius ${searchRadius}km based on previous radius ${lastRadius}km`)
+      const searchResult = await findAndPresentJobsConversational(user, searchRadius)
       
       if (searchResult.jobs.length > 0) {
         // Update user state with new jobs
