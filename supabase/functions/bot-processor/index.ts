@@ -2925,14 +2925,52 @@ async function handleMatchingConversational(
 
   // Handle edge case: no jobs in state (user may have arrived here incorrectly)
   if (matchedJobs.length === 0) {
-    console.log('⚠️ No jobs in conversation state, redirecting to job search')
+    console.log('⚠️ No jobs in conversation state, checking for job search intent')
+    
+    // If user says "cari kerja" or similar, immediately trigger a new search
+    if (await detectJobSearchIntent(message, lang)) {
+      console.log('🔍 Job search intent detected in matching state with no jobs, triggering new search')
+      const searchResult = await findAndPresentJobsConversational(user)
+      
+      if (searchResult.jobs.length > 0) {
+        // Update user state with new jobs
+        const newState = {
+          matched_jobs: searchResult.jobs,
+          current_index: 0,
+          total_jobs: searchResult.jobs.length
+        }
+        await supabase.from('applicants').update({
+          onboarding_status: 'matching',
+          conversation_state: newState,
+          current_job_matches: searchResult.jobs.map(j => j.id),
+          updated_at: new Date().toISOString()
+        }).eq('id', user.id)
+        return { response: searchResult.message, updatedUser: { ...user, onboarding_status: 'matching', conversation_state: newState } }
+      }
+      // No jobs found even with fresh search - reset to completed
+      await supabase.from('applicants').update({
+        onboarding_status: 'completed',
+        conversation_state: {},
+        updated_at: new Date().toISOString()
+      }).eq('id', user.id)
+      return { response: searchResult.message, updatedUser: { ...user, onboarding_status: 'completed', conversation_state: {} } }
+    }
+    
+    // Not a search intent - reset to completed state to break the loop
+    console.log('🔄 Resetting user from matching to completed state to break loop')
+    await supabase.from('applicants').update({
+      onboarding_status: 'completed',
+      conversation_state: {},
+      updated_at: new Date().toISOString()
+    }).eq('id', user.id)
+    
     const firstName = user.full_name?.split(' ')[0] || ''
     const response = getText(lang, {
       ms: `Hai ${firstName}! Tak ada kerja dalam senarai. Cakap "cari kerja" untuk mula cari.`,
       en: `Hi ${firstName}! No jobs in your list. Say "find job" to start searching.`,
       zh: `你好 ${firstName}！列表里没有工作。说"找工作"开始搜索。`
     })
-    return { response, updatedUser: user }
+    return { response, updatedUser: { ...user, onboarding_status: 'completed', conversation_state: {} } }
   }
 
   // Calculate valid range for current page
