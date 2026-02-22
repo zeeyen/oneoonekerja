@@ -1,47 +1,62 @@
 
 
-## Fix: "Cari Kerja" Infinite Loop in Bot Processor
+## Fix: "Ya" Not Expanding to 20km + Unrecognized Input Breaking Expand Flow
 
-### Problem
-When a user is in `matching` state but has no jobs in their conversation state, the bot tells them to say "cari kerja" to search. However, when they do, the message routes back to `handleMatchingConversational` (because `onboarding_status` is still `matching`), which hits the same empty-jobs check again -- creating an infinite loop.
+### What's Happening
 
-This is exactly what happened to user IKHWAN in the uploaded CSV:
-1. No jobs found at 10km, bot asked to expand to 20km
-2. User replied "Banting ?" instead of "ya"/"tidak"
-3. Bot got stuck in the empty-jobs loop
-4. User typed "cari kerja" 3 times -- all got the same loop response
+The conversation flow breaks at two points:
 
-### Root Cause
-`detectJobSearchIntent()` (which recognizes "cari kerja", "find job", etc.) is only called inside `handleCompletedUserConversational`, never inside `handleMatchingConversational`.
+1. Bot asks "expand to 20km? ya/tidak" but when user replies with something unexpected like "Banting ?", the bot loses track that it was waiting for a yes/no answer. Instead of re-asking, it resets everything and tells the user to say "cari kerja".
 
-### Fix (1 file)
+2. When user then says "cari kerja", the bot starts a fresh search at 10km (ignoring that 10km already failed), finds nothing again, and asks about 20km again -- creating a loop.
+
+3. When user finally says "ya", the bot has already forgotten about the expand question and just says "Want to find a job? Say 'cari kerja'".
+
+### The Fix (1 file)
 
 **`supabase/functions/bot-processor/index.ts`**
 
-Change the empty-jobs handler in `handleMatchingConversational` (around line 2926-2935) to:
+Two changes in `handleMatchingConversational`:
 
-1. **Detect job search intent** -- if the user says "cari kerja" or similar, immediately trigger a new search instead of showing the loop message
-2. **Reset to completed state** -- if the message is not a search intent, set `onboarding_status` back to `completed` so the user can properly trigger a search on their next message
+**Change 1: Re-prompt on unrecognized input during expand question (~line 2923)**
 
-```text
-Before (lines 2926-2935):
-  if matchedJobs.length === 0:
-    return "Cakap 'cari kerja' untuk mula cari"  --> LOOPS
+When `expand_search_pending` is true and the user says something that isn't "ya" or "tidak", instead of falling through to the empty-jobs handler, re-ask the expand question clearly.
 
-After:
-  if matchedJobs.length === 0:
-    if detectJobSearchIntent(message):
-      --> trigger findAndPresentJobsConversational(user)
-      --> update state to matching with new results
-      --> return job results
-    else:
-      --> reset onboarding_status to 'completed'
-      --> return "Cakap 'cari kerja' untuk mula cari"
-      --> next "cari kerja" will route to handleCompletedUser correctly
+```
+// Current: falls through silently, hits empty-jobs handler, resets state
+// After: re-ask the yes/no question
+if (convState.expand_search_pending) {
+  ...
+  if (isYes) { ... }
+  else if (isNo) { ... }
+  else {
+    // Unrecognized reply -- gently re-ask
+    const currentRadius = convState.current_radius || 10
+    const nextRadius = currentRadius < 20 ? 20 : 50
+    return { response: getText(lang, {
+      ms: `Maaf, Kak Ani tak faham. Nak cari kerja dalam radius ${nextRadius}km?\n\nBalas 'ya' atau 'tidak'.`,
+      en: `Sorry, I didn't understand. Search within ${nextRadius}km?\n\nReply 'yes' or 'no'.`,
+      zh: `抱歉，我没听懂。要搜索${nextRadius}公里内的工作吗？\n\n回复"是"或"不是"。`
+    }), updatedUser: user }
+  }
+}
 ```
 
-This ensures:
-- If the user says "cari kerja" while in the empty-jobs matching state, it immediately searches for jobs
-- If the user says something else, it resets to `completed` state, breaking the loop
-- The "Banting ?" style messages (unrecognized replies during expand prompt) also get handled gracefully
+**Change 2: Use remembered radius when "cari kerja" triggers a new search (~line 2935)**
+
+In the empty-jobs handler where `detectJobSearchIntent` triggers a new search, check if there was a previous failed radius and start from the next tier (e.g., 20km) instead of always defaulting to 10km.
+
+```
+// Current: findAndPresentJobsConversational(user) -- always 10km
+// After: use previous radius context if available
+const lastRadius = convState.current_radius || convState.last_search_radius || 10
+const searchRadius = lastRadius < 20 ? 20 : (lastRadius < 50 ? 50 : 10)
+const searchResult = await findAndPresentJobsConversational(user, searchRadius)
+```
+
+### Result
+
+- "Banting ?" during expand prompt: bot re-asks "ya atau tidak?" instead of breaking the flow
+- "cari kerja" after a failed 10km search: searches at 20km directly instead of repeating 10km
+- "ya" to expand question: works correctly because state is preserved
 
