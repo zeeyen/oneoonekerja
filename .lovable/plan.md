@@ -1,33 +1,47 @@
 
 
-## Add `job_type` to Bot's Job Knowledge
+## Fix: "Cari Kerja" Infinite Loop in Bot Processor
 
-When applicants ask "Is this freelance?", "Part time ke?", or "这是全职吗？", the bot currently can't answer because `job_type` is not included in the job data passed to the AI. This plan fixes that.
+### Problem
+When a user is in `matching` state but has no jobs in their conversation state, the bot tells them to say "cari kerja" to search. However, when they do, the message routes back to `handleMatchingConversational` (because `onboarding_status` is still `matching`), which hits the same empty-jobs check again -- creating an infinite loop.
 
-### Changes (1 file)
+This is exactly what happened to user IKHWAN in the uploaded CSV:
+1. No jobs found at 10km, bot asked to expand to 20km
+2. User replied "Banting ?" instead of "ya"/"tidak"
+3. Bot got stuck in the empty-jobs loop
+4. User typed "cari kerja" 3 times -- all got the same loop response
+
+### Root Cause
+`detectJobSearchIntent()` (which recognizes "cari kerja", "find job", etc.) is only called inside `handleCompletedUserConversational`, never inside `handleMatchingConversational`.
+
+### Fix (1 file)
 
 **`supabase/functions/bot-processor/index.ts`**
 
-1. **Add `job_type` to `MatchedJob` interface** (~line 242)
-   - Add `job_type?: string` field
+Change the empty-jobs handler in `handleMatchingConversational` (around line 2926-2935) to:
 
-2. **Include `job_type` in job mapping** (~line 3291-3302)
-   - When building `topJobs` from query results, include `job_type: s.job.job_type`
+1. **Detect job search intent** -- if the user says "cari kerja" or similar, immediately trigger a new search instead of showing the loop message
+2. **Reset to completed state** -- if the message is not a search intent, set `onboarding_status` back to `completed` so the user can properly trigger a search on their next message
 
-3. **Include `job_type` in the question-answering context** (~line 3019-3023)
-   - Update the `jobsSummary` string to include job type info
-   - Change from: `{title} at {company} ({location})`
-   - Change to: `{title} at {company} ({location}, Type: {job_type || 'Not specified'})`
+```text
+Before (lines 2926-2935):
+  if matchedJobs.length === 0:
+    return "Cakap 'cari kerja' untuk mula cari"  --> LOOPS
 
-4. **Include `job_type` in the formatted job card** (~line 3373-3384)
-   - Add a line showing job type (e.g., "Jenis: Freelance") in the job listing message so users can see it upfront
+After:
+  if matchedJobs.length === 0:
+    if detectJobSearchIntent(message):
+      --> trigger findAndPresentJobsConversational(user)
+      --> update state to matching with new results
+      --> return job results
+    else:
+      --> reset onboarding_status to 'completed'
+      --> return "Cakap 'cari kerja' untuk mula cari"
+      --> next "cari kerja" will route to handleCompletedUser correctly
+```
 
-### What this enables
+This ensures:
+- If the user says "cari kerja" while in the empty-jobs matching state, it immediately searches for jobs
+- If the user says something else, it resets to `completed` state, breaking the loop
+- The "Banting ?" style messages (unrecognized replies during expand prompt) also get handled gracefully
 
-- When a user asks "Is job 1 freelance?", GPT will have the `job_type` data in its context and can answer accurately
-- Job cards displayed to users will show the type (Freelance / Long Term) so they know before asking
-- Works in all 3 languages (BM, EN, ZH)
-
-### Technical detail
-
-The `select('*')` query already fetches `job_type` from the database. The data just needs to be carried through to the `MatchedJob` objects and included in the GPT context string.
