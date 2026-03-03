@@ -3216,6 +3216,11 @@ async function handleCompletedUserConversational(
   const convState = user.conversation_state || {};
   const recentMsgs: RecentMessage[] = convState.recent_messages || [];
 
+  const contextualSearch = await handleContextualJobSearch(user, message, lang, "completed");
+  if (contextualSearch) {
+    return contextualSearch;
+  }
+
   // Check explicit keyword-based job search intent first
   const wantsSearch = await detectJobSearchIntent(message, lang);
 
@@ -3324,6 +3329,11 @@ async function handleMatchingConversational(
   const currentIndex = convState.current_job_index || 0;
 
   console.log(`🎯 Jobs in state: ${matchedJobs.length}, currentIndex: ${currentIndex}`);
+
+  const contextualSearch = await handleContextualJobSearch(user, message, lang, "matching");
+  if (contextualSearch) {
+    return contextualSearch;
+  }
 
   // ===== EXPAND SEARCH HANDLER =====
   if (convState.expand_search_pending) {
@@ -3688,6 +3698,88 @@ function isMoreCommand(message: string): boolean {
   const lower = message.toLowerCase().trim();
   const moreWords = ["more", "lagi", "更多", "next", "seterusnya", "lain"];
   return moreWords.includes(lower) || moreWords.some((w) => lower.startsWith(w));
+}
+
+function looksLikeLocationSearchMessage(message: string): boolean {
+  const lower = normalizeStructuredMessage(message).toLowerCase();
+  const searchPhrases = [
+    "cari kerja",
+    "nak cari kerja",
+    "search job",
+    "find job",
+    "jobs near",
+    "job near",
+    "kerja dekat",
+    "kerja kat",
+    "kerja area",
+    "kerja sekitar",
+    "nak kerja kat",
+    "want job in",
+    "find jobs in",
+    "找工作",
+  ];
+  const locationHints = ["kat ", "dekat ", "near ", "in ", "area ", "sekitar ", "lokasi ", "location "];
+  return searchPhrases.some((phrase) => lower.includes(phrase)) || locationHints.some((hint) => lower.includes(hint));
+}
+
+async function handleContextualJobSearch(
+  user: User,
+  message: string,
+  lang: string,
+  sourceState: "matching" | "completed",
+): Promise<{ response: string; updatedUser: User } | null> {
+  const lower = normalizeStructuredMessage(message).toLowerCase();
+  if (!looksLikeLocationSearchMessage(message) && !(await detectJobSearchIntent(message, lang))) {
+    return null;
+  }
+
+  const extracted = await extractAllInfo(message, lang, {
+    allowName: false,
+    allowAge: false,
+    allowGender: false,
+    allowLocation: true,
+  });
+
+  if (!extracted.city && !extracted.state) {
+    return null;
+  }
+
+  const searchUser: User = {
+    ...user,
+    location_city: extracted.city || user.location_city,
+    location_state: extracted.state || user.location_state,
+    latitude: extracted.lat || user.latitude,
+    longitude: extracted.lng || user.longitude,
+  };
+
+  const result = await findAndPresentJobsConversational(searchUser);
+  const updatedUser: User = {
+    ...searchUser,
+    onboarding_status: "matching",
+    onboarding_step: "viewing_jobs",
+    conversation_state: buildPostSearchState(result),
+  };
+
+  await updateUserInDB(user.id, updatedUser, "viewing_jobs");
+
+  const locationText = [updatedUser.location_city, updatedUser.location_state].filter(Boolean).join(", ");
+  const jobCount = result.jobs.length;
+  const intro =
+    sourceState === "matching"
+      ? getText(lang, {
+          ms: `Ok, Kak Ani carikan kerja dekat ${locationText} pula.`,
+          en: `Ok, I'll search near ${locationText} instead.`,
+          zh: `好的，我改为查找${locationText}附近的工作。`,
+        })
+      : getText(lang, {
+          ms: `Ok, Kak Ani carikan kerja dekat ${locationText}.`,
+          en: `Ok, I'll search near ${locationText}.`,
+          zh: `好的，我来查找${locationText}附近的工作。`,
+        });
+
+  const response = jobCount > 0 ? `${intro}\n\n${result.message}` : `${intro}\n\n${result.message}`;
+
+  return { response, updatedUser };
 }
 
 // ============================================
