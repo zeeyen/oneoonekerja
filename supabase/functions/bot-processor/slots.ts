@@ -17,8 +17,15 @@ export function normalizeStateAlias(state: string): string {
   const map: Record<string, string> = {
     'n9': 'Negeri Sembilan',
     'ns': 'Negeri Sembilan',
-    'kl': 'Kuala Lumpur',
-    'wp kl': 'Kuala Lumpur',
+    'kl': 'W.P. Kuala Lumpur',
+    'wp kl': 'W.P. Kuala Lumpur',
+    'kuala lumpur': 'W.P. Kuala Lumpur',
+    'wp kuala lumpur': 'W.P. Kuala Lumpur',
+    'wilayah persekutuan': 'W.P. Kuala Lumpur',
+    'putrajaya': 'W.P. Putrajaya',
+    'wp putrajaya': 'W.P. Putrajaya',
+    'labuan': 'W.P. Labuan',
+    'wp labuan': 'W.P. Labuan',
     'melacca': 'Melaka'
   }
   return map[lower] || state
