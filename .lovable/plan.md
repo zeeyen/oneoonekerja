@@ -1,47 +1,62 @@
 
 
-## Problem: NLU is Silently Failing — All Messages Get Default Response
+## Fix: "Ya" Not Expanding to 20km + Unrecognized Input Breaking Expand Flow
 
-### Evidence from Logs
+### What's Happening
 
-Every single NLU call returns the exact same SAFE_DEFAULT output:
+The conversation flow breaks at two points:
+
+1. Bot asks "expand to 20km? ya/tidak" but when user replies with something unexpected like "Banting ?", the bot loses track that it was waiting for a yes/no answer. Instead of re-asking, it resets everything and tells the user to say "cari kerja".
+
+2. When user then says "cari kerja", the bot starts a fresh search at 10km (ignoring that 10km already failed), finds nothing again, and asks about 20km again -- creating a loop.
+
+3. When user finally says "ya", the bot has already forgotten about the expand question and just says "Want to find a job? Say 'cari kerja'".
+
+### The Fix (1 file)
+
+**`supabase/functions/bot-processor/index.ts`**
+
+Two changes in `handleMatchingConversational`:
+
+**Change 1: Re-prompt on unrecognized input during expand question (~line 2923)**
+
+When `expand_search_pending` is true and the user says something that isn't "ya" or "tidak", instead of falling through to the empty-jobs handler, re-ask the expand question clearly.
+
 ```
-🧠 NLU: data_response (0.5), fields=[], extract=true, lang=null
+// Current: falls through silently, hits empty-jobs handler, resets state
+// After: re-ask the yes/no question
+if (convState.expand_search_pending) {
+  ...
+  if (isYes) { ... }
+  else if (isNo) { ... }
+  else {
+    // Unrecognized reply -- gently re-ask
+    const currentRadius = convState.current_radius || 10
+    const nextRadius = currentRadius < 20 ? 20 : 50
+    return { response: getText(lang, {
+      ms: `Maaf, Kak Ani tak faham. Nak cari kerja dalam radius ${nextRadius}km?\n\nBalas 'ya' atau 'tidak'.`,
+      en: `Sorry, I didn't understand. Search within ${nextRadius}km?\n\nReply 'yes' or 'no'.`,
+      zh: `抱歉，我没听懂。要搜索${nextRadius}公里内的工作吗？\n\n回复"是"或"不是"。`
+    }), updatedUser: user }
+  }
+}
 ```
 
-This happens for ALL messages — profile data, job questions, everything. The NLU GPT call is systematically failing but the error is swallowed. The `🧠 NLU:` log appears (not the `⚠️ NLU fallback:` log), meaning JSON parsing "succeeds" — likely on an empty `{}` or error response body.
+**Change 2: Use remembered radius when "cari kerja" triggers a new search (~line 2935)**
 
-When NLU returns `data_response` in `completed.ts`, there is no handler for it, so the code falls through to the generic greeting redirect at line 196 — the robotic "Kak Ani boleh tolong carikan kerja" message.
+In the empty-jobs handler where `detectJobSearchIntent` triggers a new search, check if there was a previous failed radius and start from the next tier (e.g., 20km) instead of always defaulting to 10km.
 
-### Root Causes
-
-1. **No NLU debug logging**: The raw GPT response is never logged, making failures invisible
-2. **`completed.ts` has no fallback for unrecognized intents**: Any messageType that isn't explicitly handled (including the default `data_response`) falls to the rigid redirect instead of using GPT to respond naturally
-
-### Fix Plan
-
-**1. Add diagnostic logging to `nlu.ts`**
-Log the raw GPT response content before JSON parsing so we can see exactly what OpenAI returns:
 ```
-console.log(`🧠 NLU raw response: ${content.substring(0, 200)}`)
+// Current: findAndPresentJobsConversational(user) -- always 10km
+// After: use previous radius context if available
+const lastRadius = convState.current_radius || convState.last_search_radius || 10
+const searchRadius = lastRadius < 20 ? 20 : (lastRadius < 50 ? 50 : 10)
+const searchResult = await findAndPresentJobsConversational(user, searchRadius)
 ```
-Also log the HTTP status code from the OpenAI API response.
 
-**2. Make `completed.ts` resilient to NLU failures**
-Replace the final greeting/other fallback (line 195-202) with a GPT-powered response that uses `lastSelectedJob` context. Instead of the rigid redirect message, call `generateKakAniResponse` with full context so the bot can naturally answer any message — even if NLU classification fails.
+### Result
 
-This means the code becomes:
-- If NLU classifies correctly → handle the specific intent
-- If NLU fails or returns unknown type → still give a natural GPT response using all available context (last selected job, user profile, recent messages)
-
-**3. Same resilience in `matching.ts` fallback**
-The matching fallback at line 346-350 is also rigid. Replace with a GPT-powered response including current job list context.
-
-### Files Changed
-| File | Change |
-|------|--------|
-| `nlu.ts` | Add raw response logging + HTTP status logging |
-| `completed.ts` | Replace rigid fallback with GPT-powered contextual response |
-| `matching.ts` | Replace rigid fallback with GPT-powered contextual response |
-| Redeploy edge function |
+- "Banting ?" during expand prompt: bot re-asks "ya atau tidak?" instead of breaking the flow
+- "cari kerja" after a failed 10km search: searches at 20km directly instead of repeating 10km
+- "ya" to expand question: works correctly because state is preserved
 

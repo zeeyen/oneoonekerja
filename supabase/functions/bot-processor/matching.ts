@@ -342,12 +342,20 @@ ms: `Best! Adik pilih:\n\n*${displayTitle}* di *${selectedJob.company}*\n📍 ${
     return { response: gptResp, updatedUser: { ...user, conversation_state: newState } }
   }
 
-  // Default fallback - show help
-  const response = getText(lang, {
-    ms: `Balas nombor (${pageStart}-${pageEnd}) untuk memohon, atau 'lagi' untuk pilihan lain.`,
-    en: `Reply with a number (${pageStart}-${pageEnd}) to apply, or 'more' for more options.`,
-    zh: `回复数字（${pageStart}-${pageEnd}）申请，或「更多」查看更多。`
-  })
+  // Default fallback — GPT-powered contextual response
+  {
+    const jobsSummary = currentPageJobs
+      .map((j, i) => `${currentIndex + i + 1}. ${j.title} at ${j.company} (${j.location_city}, Type: ${j.job_type || 'Not specified'}, Salary: ${j.salary_range || 'N/A'})`).join('\n')
+    const ctx = `User is viewing job listings. Current jobs shown:\n${jobsSummary}\n\nRespond naturally to whatever the user said. If they seem to be asking about a job, answer using the info above. Then remind them to reply with a number (${pageStart}-${pageEnd}) to apply or 'lagi'/'more' for more options. Keep it short. Language: ${lang === 'zh' ? 'Chinese' : lang === 'en' ? 'English' : 'casual Malay'}.`
+    const gptResp = await generateKakAniResponse(user, message, ctx, recentMsgsMatch)
 
-  return { response, updatedUser: user }
+    const updatedRecent = addToRecentMessages(convState, message, gptResp)
+    const newState = { ...convState, recent_messages: updatedRecent }
+    await supabase.from('applicants').update({
+      conversation_state: newState,
+      updated_at: new Date().toISOString()
+    }).eq('id', user.id)
+
+    return { response: gptResp, updatedUser: { ...user, conversation_state: newState } }
+  }
 }
