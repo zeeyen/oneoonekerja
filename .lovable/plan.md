@@ -1,54 +1,62 @@
 
 
-## Root Cause: Missing Federal Territory Data in `malaysia_locations` Table
+## Fix: "Ya" Not Expanding to 20km + Unrecognized Input Breaking Expand Flow
 
-The `malaysia_locations` table has **427 rows across 13 states** but is completely missing all **Federal Territory** entries:
-- **Kuala Lumpur** (not listed as a state at all)
-- **Putrajaya** (missing)
-- **Labuan** (missing)
+### What's Happening
 
-This means towns like Kepong, Segambut, Setapak, Wangsa Maju, Cheras (KL side), Sentul, Titiwangsa — none exist in the table.
+The conversation flow breaks at two points:
 
-The Selangor entries also lack several key KL-adjacent towns.
+1. Bot asks "expand to 20km? ya/tidak" but when user replies with something unexpected like "Banting ?", the bot loses track that it was waiting for a yes/no answer. Instead of re-asking, it resets everything and tells the user to say "cari kerja".
 
-### Why GPT Geocoding Also Fails
+2. When user then says "cari kerja", the bot starts a fresh search at 10km (ignoring that 10km already failed), finds nothing again, and asks about 20km again -- creating a loop.
 
-During **location clarification mode** (when the bot already has name/age/gender and is re-asking for location), the code calls `extractSpecificFields` or `extractAllInfo` with just the city name (e.g., "Kepong"). GPT returns `lat: null, lng: null` — likely because the focused extraction prompt doesn't carry the full coordinate reference list, and the model sometimes fails on short single-word inputs.
+3. When user finally says "ya", the bot has already forgotten about the expand question and just says "Want to find a job? Say 'cari kerja'".
 
-The fallback chain is: GPT coords → DB lookup → give up. Both fail, so the bot loops asking for location clarification indefinitely.
+### The Fix (1 file)
 
-### Fix Plan
+**`supabase/functions/bot-processor/index.ts`**
 
-**1. Insert Federal Territory locations into `malaysia_locations` table**
+Two changes in `handleMatchingConversational`:
 
-Add ~40-50 rows covering:
+**Change 1: Re-prompt on unrecognized input during expand question (~line 2923)**
 
-- **W.P. Kuala Lumpur** (state): Kepong, Segambut, Setapak, Wangsa Maju, Sentul, Cheras (KL), Bukit Jalil, Sri Petaling, Bangsar, Mont Kiara, Hartamas, Titiwangsa, Batu, Jinjang, Setiawangsa, Taman Tun Dr Ismail (TTDI), Desa Petaling, Salak Selatan, Kuala Lumpur (city center)
-- **W.P. Putrajaya**: Putrajaya
-- **W.P. Labuan**: Labuan
+When `expand_search_pending` is true and the user says something that isn't "ya" or "tidak", instead of falling through to the empty-jobs handler, re-ask the expand question clearly.
 
-Also add missing Selangor towns: Damansara, Kota Damansara, USJ, Pandan Indah, Taman Melawati, etc.
-
-**2. Add aliases for common spelling variations**
-
-The `malaysia_locations` table has an `aliases` column (text[]). Populate aliases for entries like:
-- Kuala Lumpur → aliases: `['kl', 'KL']`
-- Kepong → aliases: `['kepong baru']`
-
-**3. Update the DB lookup to also search the `aliases` column**
-
-Currently `getMalaysiaLocationCandidates` only searches the `name` column. Modify to also match against `aliases` array using Supabase's `cs` (contains) or a dedicated query.
-
-### Technical Details
-
-The `malaysia_locations` table schema:
 ```
-name (varchar), state (varchar), latitude (numeric), longitude (numeric), 
-aliases (text[]), state_code (varchar), is_geocoded (boolean)
+// Current: falls through silently, hits empty-jobs handler, resets state
+// After: re-ask the yes/no question
+if (convState.expand_search_pending) {
+  ...
+  if (isYes) { ... }
+  else if (isNo) { ... }
+  else {
+    // Unrecognized reply -- gently re-ask
+    const currentRadius = convState.current_radius || 10
+    const nextRadius = currentRadius < 20 ? 20 : 50
+    return { response: getText(lang, {
+      ms: `Maaf, Kak Ani tak faham. Nak cari kerja dalam radius ${nextRadius}km?\n\nBalas 'ya' atau 'tidak'.`,
+      en: `Sorry, I didn't understand. Search within ${nextRadius}km?\n\nReply 'yes' or 'no'.`,
+      zh: `抱歉，我没听懂。要搜索${nextRadius}公里内的工作吗？\n\n回复"是"或"不是"。`
+    }), updatedUser: user }
+  }
+}
 ```
 
-Changes needed:
-- **SQL INSERT**: ~50 rows for Federal Territory + missing Selangor locations
-- **`location.ts`**: Update `getMalaysiaLocationCandidates()` to add an alias-based fallback query when exact name match fails
-- **No changes** to onboarding flow, extraction, or state machine — the issue is purely missing reference data + incomplete lookup
+**Change 2: Use remembered radius when "cari kerja" triggers a new search (~line 2935)**
+
+In the empty-jobs handler where `detectJobSearchIntent` triggers a new search, check if there was a previous failed radius and start from the next tier (e.g., 20km) instead of always defaulting to 10km.
+
+```
+// Current: findAndPresentJobsConversational(user) -- always 10km
+// After: use previous radius context if available
+const lastRadius = convState.current_radius || convState.last_search_radius || 10
+const searchRadius = lastRadius < 20 ? 20 : (lastRadius < 50 ? 50 : 10)
+const searchResult = await findAndPresentJobsConversational(user, searchRadius)
+```
+
+### Result
+
+- "Banting ?" during expand prompt: bot re-asks "ya atau tidak?" instead of breaking the flow
+- "cari kerja" after a failed 10km search: searches at 20km directly instead of repeating 10km
+- "ya" to expand question: works correctly because state is preserved
 

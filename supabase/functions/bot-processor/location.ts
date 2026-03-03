@@ -50,12 +50,6 @@ export function normalizeLookupCity(city: string): string {
     'seremban2': 'seremban',
     'seremban 2': 'seremban',
     'puchong jaya': 'puchong',
-    'subang': 'subang jaya',
-    'damansara': 'petaling jaya',
-    'kota damansara': 'petaling jaya',
-    'ss2': 'petaling jaya',
-    'ss15': 'subang jaya',
-    'usj': 'subang jaya',
     'setia alam': 'shah alam',
     'setia city': 'shah alam'
   }
@@ -70,6 +64,7 @@ export async function getMalaysiaLocationCandidates(city: string): Promise<Malay
   const normalizedCity = normalizeLookupCity(city)
   if (!normalizedCity) return []
 
+  // Step 1: Exact name match
   let { data, error } = await supabase
     .from('malaysia_locations')
     .select('name, state, latitude, longitude')
@@ -81,6 +76,7 @@ export async function getMalaysiaLocationCandidates(city: string): Promise<Malay
     return []
   }
 
+  // Step 2: Fuzzy name match
   if (!data || data.length === 0) {
     const pattern = `%${normalizedCity.split(/\s+/).filter(Boolean).join('%')}%`
     const fuzzy = await supabase
@@ -91,9 +87,26 @@ export async function getMalaysiaLocationCandidates(city: string): Promise<Malay
 
     if (fuzzy.error) {
       console.error('❌ malaysia_locations fuzzy lookup error:', fuzzy.error)
-      return []
+    } else {
+      data = fuzzy.data || []
     }
-    data = fuzzy.data || []
+  }
+
+  // Step 3: Alias-based fallback — search the aliases array column
+  if (!data || data.length === 0) {
+    console.log(`📍 Name lookup failed for "${normalizedCity}", trying aliases...`)
+    const aliasResult = await supabase
+      .from('malaysia_locations')
+      .select('name, state, latitude, longitude')
+      .contains('aliases', [normalizedCity])
+      .limit(20)
+
+    if (aliasResult.error) {
+      console.error('❌ malaysia_locations alias lookup error:', aliasResult.error)
+    } else if (aliasResult.data && aliasResult.data.length > 0) {
+      console.log(`📍 Alias match found: "${normalizedCity}" → ${aliasResult.data.map(r => r.name).join(', ')}`)
+      data = aliasResult.data
+    }
   }
 
   const dedup = new Map<string, MalaysiaLocationRow>()
