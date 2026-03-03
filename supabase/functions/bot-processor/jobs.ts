@@ -6,14 +6,36 @@ import { getUserJobSelections } from './job-selections.ts'
 
 // ============================================
 // EXTRACT JOB NUMBER (Running numbers)
+// Now handles natural phrasing: "nombor 1", "N0 3", "saya pilih 2", etc.
 // ============================================
 export function extractJobNumber(message: string, maxJobs: number): number | null {
   const lower = message.toLowerCase().trim()
 
-  // Try direct number
-  const num = parseInt(lower)
-  if (!isNaN(num) && num >= 1 && num <= maxJobs) {
-    return num
+  // Try direct number (bare "1", "2", etc.)
+  const directNum = parseInt(lower)
+  if (!isNaN(directNum) && directNum >= 1 && directNum <= maxJobs && /^\d+$/.test(lower)) {
+    return directNum
+  }
+
+  // Natural phrasing patterns: "nombor 1", "no 1", "num 1", "N0 3", "no. 2"
+  const phrasePatterns = [
+    /\b(?:nombor|nomber|number|num|no\.?|n[o0])\s*(\d+)/i,
+    /\b(?:saya\s+(?:nak|pilih|mohon|mahu|mau|choose|pick|want|ingin\s+mohon))\s+(?:(?:nombor|nomber|number|num|no\.?|n[o0])\s*)?(\d+)/i,
+    /\b(?:pilih|pick|choose|select)\s+(?:(?:nombor|nomber|number|num|no\.?|n[o0])\s*)?(\d+)/i,
+    /^(\d+)\s*(?:tu|itu|je|la|lah|please|pls)$/i,
+  ]
+
+  for (const pattern of phrasePatterns) {
+    const match = lower.match(pattern)
+    if (match) {
+      const num = parseInt(match[1])
+      if (num >= 1 && num <= maxJobs) return num
+    }
+  }
+
+  // Range detection: "1-3" or "1 sampai 3" → return null (ambiguous, let NLU handle)
+  if (/\d+\s*[-–]\s*\d+/.test(lower) || /\d+\s*sampai\s*\d+/i.test(lower)) {
+    return null
   }
 
   // Try ordinals

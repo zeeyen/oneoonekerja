@@ -249,13 +249,25 @@ ms: `Best! Adik pilih:\n\n*${displayTitle}* di *${selectedJob.company}*\n📍 ${
     }
   }
 
-  // Context-aware relocation search while in matching state.
-  // Example: "ada kerja dekat KL?" / "find jobs in Johor".
-  const relocationSearchIntent =
-    /(\bcari\b|\bfind\b|\bjob\b|\bkerja\b)/i.test(message) &&
-    /(\bdekat\b|\bkat\b|\bnear\b|\bin\b|\blokasi\b|\blocation\b|\bjauh\b|\bfar\b|\barea\b)/i.test(message)
-  if (relocationSearchIntent) {
-    const extractedRelocation = await extractAllInfo(message, lang)
+  // === NLU CLASSIFICATION — handles relocation, questions, preferences ===
+  const recentMsgsMatch: RecentMessage[] = convState.recent_messages || []
+  const currentPageJobs = matchedJobs.slice(currentIndex, currentIndex + 3)
+  const matchNlu = await understandMessage(message, {
+    currentStep: 'matching', missingFields: [], lang,
+    hasName: !!user.full_name, hasAge: !!user.age,
+    hasGender: !!user.gender, hasLocation: !!(user.location_city || user.location_state),
+    userName: user.full_name?.split(' ')[0],
+    currentJobsList: currentPageJobs
+  }, recentMsgsMatch)
+
+  // Persist detected language if different
+  if (matchNlu.detectedLanguage && matchNlu.detectedLanguage !== lang) {
+    user.preferred_language = matchNlu.detectedLanguage
+  }
+
+  // === RELOCATION SEARCH (NLU-detected) ===
+  if (matchNlu.messageType === 'job_search_location' && matchNlu.detectedLocation) {
+    const extractedRelocation = await extractAllInfo(matchNlu.detectedLocation, lang)
     if ((extractedRelocation.city || extractedRelocation.state) && extractedRelocation.lat && extractedRelocation.lng) {
       user.location_city = extractedRelocation.city || user.location_city
       user.location_state = extractedRelocation.state || user.location_state
@@ -289,28 +301,14 @@ ms: `Best! Adik pilih:\n\n*${displayTitle}* di *${selectedJob.company}*\n📍 ${
     }
   }
 
-  // === NLU CLASSIFICATION before fallback ===
-  const recentMsgsMatch: RecentMessage[] = convState.recent_messages || []
-  const matchNlu = await understandMessage(message, {
-    currentStep: 'matching', missingFields: [], lang,
-    hasName: !!user.full_name, hasAge: !!user.age,
-    hasGender: !!user.gender, hasLocation: !!(user.location_city || user.location_state),
-    userName: user.full_name?.split(' ')[0]
-  }, recentMsgsMatch)
-
-  // Persist detected language if different
-  if (matchNlu.detectedLanguage && matchNlu.detectedLanguage !== lang) {
-    user.preferred_language = matchNlu.detectedLanguage
-  }
-
-  if (matchNlu.messageType === 'question') {
-    // User asking about a job - provide context from matched jobs
+  // === QUESTION ABOUT JOB or GENERAL QUESTION ===
+  if (matchNlu.messageType === 'question' || matchNlu.messageType === 'question_about_job') {
     let gptResp: string
     if (matchNlu.contextualResponse) {
       gptResp = matchNlu.contextualResponse
     } else {
-      const jobsSummary = matchedJobs.slice(currentIndex, currentIndex + 3)
-        .map((j, i) => `${currentIndex + i + 1}. ${j.title} at ${j.company} (${j.location_city}, Type: ${j.job_type || 'Not specified'})`).join('\n')
+      const jobsSummary = currentPageJobs
+        .map((j, i) => `${currentIndex + i + 1}. ${j.title} at ${j.company} (${j.location_city}, Type: ${j.job_type || 'Not specified'}, Salary: ${j.salary_range || 'N/A'})`).join('\n')
       const ctx = `User is viewing jobs and asking a question. Current jobs shown:\n${jobsSummary}\n\nAnswer their question using the job info above. Then remind them to reply with a number (${pageStart}-${pageEnd}) to apply or 'lagi'/'more' for more options. Keep it short.`
       gptResp = await generateKakAniResponse(user, message, ctx, recentMsgsMatch)
     }
