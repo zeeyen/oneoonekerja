@@ -215,8 +215,18 @@ CONTEXTUAL RESPONSE RULES:
       })
     })
 
+    const httpStatus = response.status
+    console.log(`🧠 NLU HTTP status: ${httpStatus}`)
+
+    if (!response.ok) {
+      const errorBody = await response.text()
+      console.error(`🧠 NLU API error (${httpStatus}): ${errorBody.substring(0, 300)}`)
+      return { ...SAFE_DEFAULT }
+    }
+
     const result = await response.json()
     const content = result.choices?.[0]?.message?.content?.trim() || '{}'
+    console.log(`🧠 NLU raw response: ${content.substring(0, 300)}`)
     const jsonMatch = content.match(/\{[\s\S]*\}/)
 
     if (jsonMatch) {
@@ -233,6 +243,8 @@ CONTEXTUAL RESPONSE RULES:
       }
       console.log(`🧠 NLU: ${nluResult.messageType} (${nluResult.confidence}), fields=[${nluResult.extractableFields}], extract=${nluResult.shouldExtract}, lang=${nluResult.detectedLanguage}, loc=${nluResult.detectedLocation} for "${message.substring(0, 40)}..."`)
       return nluResult
+    } else {
+      console.warn(`🧠 NLU: No JSON found in response: ${content.substring(0, 200)}`)
     }
   } catch (error) {
     console.error('NLU understandMessage error:', error)

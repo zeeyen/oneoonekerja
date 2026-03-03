@@ -192,14 +192,29 @@ export async function handleCompletedUserConversational(
     return { response: resp, updatedUser: { ...user, conversation_state: { ...convState, recent_messages: updatedRecent } } }
   }
 
-  // === GREETING / OTHER — warm redirect with options ===
-  const response = nlu.contextualResponse || getText(lang, {
-    ms: `Hai ${firstName}! 😊\n\nKak Ani boleh tolong carikan kerja. Cakap je:\n• Lokasi yang adik nak, contoh "ada kerja kat KL?"\n• Atau cakap "cari kerja" untuk cari dekat lokasi adik sekarang`,
-    en: `Hi ${firstName}! 😊\n\nI can help you find a job. Just say:\n• A location, e.g. "any jobs in KL?"\n• Or say "find job" to search near your current location`,
-    zh: `你好${firstName}！😊\n\n我可以帮你找工作。告诉我：\n• 地点，比如"KL有工作吗？"\n• 或说"找工作"搜索你附近的工作`
-  })
+  // === FALLBACK — GPT-powered contextual response instead of rigid redirect ===
+  {
+    let gptResp: string
+    if (nlu.contextualResponse) {
+      gptResp = nlu.contextualResponse
+    } else {
+      let ctx = `User has completed onboarding. Their profile: name=${user.full_name}, location=${user.location_city}, ${user.location_state}.`
+      if (lastSelectedJob) {
+        ctx += `\n\nLast selected job: "${lastSelectedJob.title}" at "${lastSelectedJob.company}", salary: ${lastSelectedJob.salary_range || 'N/A'}, type: ${lastSelectedJob.job_type || 'N/A'}, apply URL: ${lastSelectedJob.url || 'N/A'}.`
+        ctx += `\nIf the user seems to be asking about this job, answer using these details.`
+      }
+      ctx += `\n\nRespond naturally to whatever the user said. If they seem to want to find jobs, encourage them. If they're asking a question, answer it. Keep it short (1-3 lines). Language: ${lang === 'zh' ? 'Chinese' : lang === 'en' ? 'English' : 'casual Malay'}.`
+      gptResp = await generateKakAniResponse(user, message, ctx, recentMsgs)
+    }
 
-  return { response, updatedUser: user }
+    const updatedRecent = addToRecentMessages(convState, message, gptResp)
+    await supabase.from('applicants').update({
+      conversation_state: { ...convState, recent_messages: updatedRecent },
+      updated_at: new Date().toISOString()
+    }).eq('id', user.id)
+
+    return { response: gptResp, updatedUser: { ...user, conversation_state: { ...convState, recent_messages: updatedRecent } } }
+  }
 }
 
 // Helper: perform a generic job search at user's current location
