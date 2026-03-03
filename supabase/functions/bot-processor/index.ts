@@ -1,8 +1,8 @@
 // Supabase Edge Function: bot-processor (Enhanced Version v2)
 // 101Kerja WhatsApp Bot powered by GPT-4o-mini
 // Personality: Kak Ani - friendly kakak helping B40s find work
-// ENHANCED FLOW: Language → All Info → Jobs (no confirmation step)
-// Features: Running job numbers, language switch, session timeout
+// ENHANCED FLOW: BM-first → All Info → Jobs (no confirmation step)
+// Features: Running job numbers, per-turn language mirroring, session timeout
 // Deploy: supabase functions deploy bot-processor --no-verify-jwt
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -160,9 +160,10 @@ PERATURAN PENTING:
 5. Kalau user guna Chinese, reply in Simplified Chinese
 6. JANGAN guna emoji - buat natural macam manusia
 
-ALIRAN ONBOARDING (RINGKAS - 2 langkah sahaja):
-1. Sambut & tanya bahasa pilihan (BM/EN/ZH)
-2. Minta SEMUA maklumat sekali: nama, umur, jantina, lokasi → terus cari kerja`;
+ALIRAN ONBOARDING (RINGKAS):
+1. Sambut user dalam BM dahulu
+2. Minta SEMUA maklumat sekali: nama, umur, jantina, lokasi
+3. Mirror bahasa user selepas itu (BM/EN/ZH) → terus cari kerja`;
 
 // ============================================
 // HELPER FUNCTIONS
@@ -262,6 +263,327 @@ interface JobSelection {
   location_state: string | null;
   apply_url: string | null;
   selected_at: string;
+}
+
+type SlotKey = "name" | "age" | "gender" | "location";
+
+interface SlotMemory {
+  value: string | number | null;
+  confidence: number;
+  locked: boolean;
+  seen_count: number;
+}
+
+// ============================================
+// LANGUAGE MIRRORING HELPERS
+// ============================================
+function normalizeLooseText(text: string): string {
+  return text.toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+function isLowSignalMessage(message: string): boolean {
+  const lower = normalizeLooseText(message).replace(/[!?.,:;]+$/g, "");
+  if (!lower) return true;
+  if (/^[\d\s]+$/.test(lower)) return true;
+  if (/^[^\w\u4e00-\u9fff]+$/i.test(lower)) return true;
+  const lowSignalTokens = new Set([
+    "ok",
+    "okay",
+    "k",
+    "kk",
+    "ya",
+    "yes",
+    "y",
+    "no",
+    "tak",
+    "tidak",
+    "x",
+    "hmm",
+    "lagi",
+    "more",
+    "semula",
+    "restart",
+    "hi",
+    "hello",
+    "hai",
+    "helo",
+    "1",
+    "2",
+    "3",
+  ]);
+  return lowSignalTokens.has(lower);
+}
+
+function detectMessageLanguage(message: string): string | null {
+  if (!message || isLowSignalMessage(message)) return null;
+  if (/[\u4e00-\u9fff]/.test(message)) return "zh";
+
+  const lower = normalizeLooseText(message);
+  const msWords = [
+    "saya",
+    "nama",
+    "umur",
+    "lelaki",
+    "perempuan",
+    "duduk",
+    "kat",
+    "dekat",
+    "nak",
+    "kerja",
+    "tak",
+    "boleh",
+    "lokasi",
+    "mana",
+    "kampung",
+    "bagitahu",
+  ];
+  const enWords = [
+    "i ",
+    "my",
+    "name",
+    "age",
+    "male",
+    "female",
+    "where",
+    "job",
+    "find",
+    "location",
+    "full time",
+    "part time",
+    "please",
+    "can you",
+  ];
+
+  const scoreWords = (words: string[]) => words.reduce((acc, w) => acc + (lower.includes(w) ? 1 : 0), 0);
+  const msScore = scoreWords(msWords);
+  const enScore = scoreWords(enWords);
+
+  if (msScore === 0 && enScore === 0) return null;
+  if (Math.abs(msScore - enScore) <= 0) return null;
+  return msScore > enScore ? "ms" : "en";
+}
+
+function resolveMirroredLanguage(message: string, currentLang: string = "ms"): string {
+  const detected = detectMessageLanguage(message);
+  return detected || currentLang || "ms";
+}
+
+// ============================================
+// SLOT MEMORY HELPERS (ANTI-OVERWRITE)
+// ============================================
+function buildSlot(value: string | number | null | undefined, confidence = 0.6): SlotMemory {
+  return {
+    value: value ?? null,
+    confidence: value != null ? confidence : 0,
+    locked: value != null && confidence >= 0.8,
+    seen_count: value != null ? 1 : 0,
+  };
+}
+
+function normalizeStateAlias(state: string): string {
+  const lower = normalizeLooseText(state);
+  const map: Record<string, string> = {
+    n9: "Negeri Sembilan",
+    ns: "Negeri Sembilan",
+    kl: "Kuala Lumpur",
+    "wp kl": "Kuala Lumpur",
+    melacca: "Melaka",
+  };
+  return map[lower] || state;
+}
+
+function normalizeLocationInput(raw: string): string {
+  let text = normalizeLooseText(raw);
+  const cleanupPatterns = [
+    /^saya\s+duduk\s+di\s+/i,
+    /^saya\s+duduk\s+/i,
+    /^duduk\s+di\s+/i,
+    /^duduk\s+/i,
+    /^saya\s+di\s+/i,
+    /^di\s+area\s+/i,
+    /^area\s+/i,
+    /^kat\s+/i,
+    /^dekat\s+/i,
+    /^lokasi\s*[:=]?\s*/i,
+    /^location\s*[:=]?\s*/i,
+    /^kg\s+/i,
+    /^kpg\s+/i,
+  ];
+
+  for (const pattern of cleanupPatterns) {
+    text = text.replace(pattern, "");
+  }
+
+  text = text.replace(/\bn9\b/gi, "negeri sembilan");
+  text = text.replace(/\bns\b/gi, "negeri sembilan");
+  return text.trim();
+}
+
+function isLikelyLocationLikeText(text: string): boolean {
+  const lower = normalizeLooseText(text);
+  return /\b(duduk|area|kg|kampung|jalan|jln|taman|bandar|state|negeri|selangor|johor|melaka|perak|kedah|pahang|sabah|sarawak|kl|n9)\b/i.test(
+    lower,
+  );
+}
+
+function isLikelyValidName(name: string): boolean {
+  const candidate = normalizeLooseText(name);
+  if (!candidate || candidate.length < 2 || candidate.length > 40) return false;
+  if (!/^[a-zA-Z\s.'/-]+$/.test(name)) return false;
+  if (isLikelyLocationLikeText(candidate)) return false;
+
+  const blocked = new Set([
+    "lagi",
+    "more",
+    "semula",
+    "restart",
+    "ok",
+    "okay",
+    "yes",
+    "no",
+    "tak",
+    "tidak",
+    "rumah",
+    "scam",
+    "test",
+    "testing",
+    "job",
+    "kerja",
+    "find",
+    "cari",
+    "help",
+    "tolong",
+  ]);
+  if (blocked.has(candidate)) return false;
+  return true;
+}
+
+function isStructuredProfileMessage(message: string, extracted: ExtractedInfo): boolean {
+  let signalCount = 0;
+  if (extracted.name) signalCount++;
+  if (extracted.age) signalCount++;
+  if (extracted.gender) signalCount++;
+  if (extracted.city || extracted.state) signalCount++;
+  const hasSeparators = /[,./|:\n-]/.test(message);
+  return signalCount >= 3 || (signalCount >= 2 && hasSeparators);
+}
+
+function constrainExtractionToMissingSlot(
+  extracted: ExtractedInfo,
+  onlyMissing: string,
+  message: string,
+): ExtractedInfo {
+  if (isStructuredProfileMessage(message, extracted)) return extracted;
+
+  if (onlyMissing === "location") {
+    return {
+      ...extracted,
+      name: null,
+      age: null,
+      gender: null,
+    };
+  }
+
+  if (onlyMissing === "name") {
+    return { ...extracted, age: null, gender: null, city: null, state: null, lat: null, lng: null };
+  }
+
+  if (onlyMissing === "age") {
+    return { ...extracted, name: null, gender: null, city: null, state: null, lat: null, lng: null };
+  }
+
+  if (onlyMissing === "gender") {
+    return { ...extracted, name: null, age: null, city: null, state: null, lat: null, lng: null };
+  }
+
+  return extracted;
+}
+
+function hasStrongCorrectionSignal(slot: SlotKey, message: string): boolean {
+  const lower = normalizeLooseText(message);
+  const signals: Record<SlotKey, RegExp[]> = {
+    name: [/\b(nama\s+saya|my name is|name is|nama)\b/i],
+    age: [/\b(umur|age|tahun|years? old)\b/i],
+    gender: [/\b(jantina|gender|lelaki|perempuan|male|female)\b/i],
+    location: [/\b(duduk|lokasi|location|kat|dekat|area|kampung|kg|city|town)\b/i],
+  };
+  return signals[slot].some((p) => p.test(lower));
+}
+
+function getProfileSlots(user: User, convState: Record<string, any>): Record<SlotKey, SlotMemory> {
+  const stored = convState.profile_slots || {};
+  return {
+    name: stored.name || buildSlot(user.full_name || null, user.full_name ? 0.9 : 0),
+    age: stored.age || buildSlot(user.age || null, user.age ? 0.9 : 0),
+    gender: stored.gender || buildSlot(user.gender || null, user.gender ? 0.9 : 0),
+    location:
+      stored.location ||
+      buildSlot(
+        user.location_city || user.location_state || null,
+        user.location_city || user.location_state ? 0.85 : 0,
+      ),
+  };
+}
+
+function mergeSlotValue(
+  slot: SlotKey,
+  slots: Record<SlotKey, SlotMemory>,
+  candidate: string | number | null | undefined,
+  message: string,
+): void {
+  if (candidate == null || candidate === "") return;
+  const entry = slots[slot];
+  const normalizedCandidate = typeof candidate === "string" ? normalizeLooseText(candidate) : `${candidate}`;
+  const normalizedCurrent = entry.value != null ? normalizeLooseText(String(entry.value)) : null;
+
+  if (slot === "name" && typeof candidate === "string" && !isLikelyValidName(candidate)) return;
+
+  if (normalizedCurrent && normalizedCurrent === normalizedCandidate) {
+    entry.seen_count += 1;
+    entry.confidence = Math.min(1, entry.confidence + 0.08);
+    if (entry.confidence >= 0.82 || entry.seen_count >= 2) entry.locked = true;
+    return;
+  }
+
+  if (!entry.value) {
+    entry.value = candidate;
+    entry.seen_count = 1;
+    entry.confidence = hasStrongCorrectionSignal(slot, message) ? 0.86 : 0.72;
+    entry.locked = entry.confidence >= 0.85;
+    return;
+  }
+
+  // Existing value present: only replace if unlocked or user gives strong correction/structured profile.
+  const structuredSignal = /[,./|:\n-]/.test(message) && message.trim().split(/\s+/).length >= 4;
+  if (!entry.locked || hasStrongCorrectionSignal(slot, message) || structuredSignal) {
+    entry.value = candidate;
+    entry.seen_count = 1;
+    entry.confidence = hasStrongCorrectionSignal(slot, message)
+      ? 0.88
+      : structuredSignal
+        ? 0.8
+        : Math.max(0.65, entry.confidence - 0.1);
+    entry.locked = entry.confidence >= 0.85;
+  }
+}
+
+function applySlotsToUser(user: User, slots: Record<SlotKey, SlotMemory>, extracted: ExtractedInfo): User {
+  const next: User = { ...user };
+  if (slots.name.value && typeof slots.name.value === "string") next.full_name = slots.name.value.toUpperCase();
+  if (slots.age.value && typeof slots.age.value === "number") next.age = slots.age.value;
+  if (slots.gender.value && typeof slots.gender.value === "string") next.gender = slots.gender.value;
+
+  // Location slot uses parsed location fields to keep city/state granularity.
+  if (extracted.city) next.location_city = extracted.city;
+  if (extracted.state) next.location_state = normalizeStateAlias(extracted.state);
+  if (extracted.lat) next.latitude = extracted.lat;
+  if (extracted.lng) next.longitude = extracted.lng;
+
+  // Fallback if extracted location missing but slot exists.
+  if (!next.location_city && !next.location_state && typeof slots.location.value === "string") {
+    next.location_city = slots.location.value;
+  }
+  return next;
 }
 
 // ============================================
@@ -494,6 +816,20 @@ serve(async (req) => {
 
     const { user, message, messageType, locationData }: ProcessRequest = await req.json();
 
+    // Mirror applicant language per turn (with low-signal guard to avoid random flips).
+    const previousLang = user.preferred_language || "ms";
+    const mirroredLang = resolveMirroredLanguage(message, previousLang);
+    user.preferred_language = mirroredLang;
+    if (mirroredLang !== previousLang) {
+      await supabase
+        .from("applicants")
+        .update({
+          preferred_language: mirroredLang,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+    }
+
     console.log(`🤖 Kak Ani processing for user ${user.id}`);
     console.log(`   📊 Status: ${user.onboarding_status}, Step: ${user.onboarding_step}`);
     console.log(`   💬 Message: "${message.substring(0, 50)}..."`);
@@ -543,12 +879,11 @@ serve(async (req) => {
       return jsonResponse(result);
     }
 
-    // Check for language change command (mid-flow)
+    // Keep explicit language switch command for user control (optional).
     const langChangeResult = detectLanguageChangeCommand(message);
     if (langChangeResult && user.onboarding_status !== "new") {
       const updatedUser = { ...user, preferred_language: langChangeResult };
-      await updateUserInDB(user.id, updatedUser, user.onboarding_step || "welcome");
-
+      await updateUserInDB(user.id, updatedUser, user.onboarding_step || "collect_info");
       const langChangedMessages = {
         en: "Language changed to English. How can I help you find a job?",
         ms: "Ok dah tukar ke Bahasa Malaysia. Nak cari kerja apa?",
@@ -704,6 +1039,23 @@ async function handleSessionExpired(user: User, message: string): Promise<{ resp
       });
 
       return { response, updatedUser };
+    }
+
+    // Recovery: user may send location directly instead of replying 1/2.
+    const directLocation = await extractAllInfo(message, lang);
+    if (directLocation.city || directLocation.state) {
+      console.log("📍 Session-expired menu: detected direct location input, routing to update_location flow");
+      const transitionUser: User = {
+        ...user,
+        onboarding_status: "in_progress",
+        onboarding_step: "update_location",
+        conversation_state: { updating_location_only: true },
+        location_city: undefined,
+        location_state: undefined,
+        latitude: undefined,
+        longitude: undefined,
+      };
+      return await handleOnboardingConversational(transitionUser, message, "update_location");
     }
   }
 
@@ -869,13 +1221,14 @@ async function handleShortcodeSearch(
       return { response: noJobsMsg, updatedUser: user };
     } else {
       // New user - fall through to normal onboarding
-      const noJobsMsg = `Maaf, tiada kerja dijumpai untuk "${expanded}".\n\nTakpe, Kak Ani boleh tolong cari kerja lain!\n\nSebelum tu, adik prefer bahasa apa?\n1. Bahasa Malaysia\n2. English\n3. 中文 (Chinese)`;
+      const noJobsMsg = `Maaf, tiada kerja dijumpai untuk "${expanded}".\n\nTakpe, Kak Ani boleh tolong cari kerja lain.\n\nBoleh bagitahu:\n- Nama penuh\n- Umur\n- Lelaki/Perempuan\n- Duduk mana (bandar, negeri)\n\nContoh: "Ahmad, 25, lelaki, Shah Alam Selangor"`;
 
       await supabase
         .from("applicants")
         .update({
           onboarding_status: "in_progress",
-          onboarding_step: "language",
+          onboarding_step: "collect_info",
+          preferred_language: "ms",
           conversation_state: {},
           updated_at: new Date().toISOString(),
         })
@@ -883,7 +1236,13 @@ async function handleShortcodeSearch(
 
       return {
         response: noJobsMsg,
-        updatedUser: { ...user, onboarding_status: "in_progress", onboarding_step: "language", conversation_state: {} },
+        updatedUser: {
+          ...user,
+          onboarding_status: "in_progress",
+          onboarding_step: "collect_info",
+          preferred_language: "ms",
+          conversation_state: {},
+        },
       };
     }
   }
@@ -1042,6 +1401,12 @@ function preserveShortcodeContext(
   }
   if (existingState?.last_image_at) {
     newState.last_image_at = existingState.last_image_at;
+  }
+  if (existingState?.profile_slots && !newState.profile_slots) {
+    newState.profile_slots = existingState.profile_slots;
+  }
+  if (existingState?.recent_messages && !newState.recent_messages) {
+    newState.recent_messages = existingState.recent_messages;
   }
   return newState;
 }
@@ -1614,6 +1979,23 @@ async function handleRestartLocationChoice(
     return { response, updatedUser };
   }
 
+  // Recovery: user may send city/state directly instead of menu number.
+  const directLocation = await extractAllInfo(message, lang);
+  if (directLocation.city || directLocation.state) {
+    console.log("📍 Restart menu: detected direct location input, routing to update_location flow");
+    const transitionUser: User = {
+      ...user,
+      onboarding_status: "in_progress",
+      onboarding_step: "update_location",
+      conversation_state: { updating_location_only: true },
+      location_city: undefined,
+      location_state: undefined,
+      latitude: undefined,
+      longitude: undefined,
+    };
+    return await handleOnboardingConversational(transitionUser, message, "update_location");
+  }
+
   // Invalid choice - ask again
   const currentLocation = [user.location_city, user.location_state].filter(Boolean).join(", ");
   const response = getText(lang, {
@@ -1633,7 +2015,8 @@ async function handleNewUserConversational(user: User): Promise<{ response: stri
     .from("applicants")
     .update({
       onboarding_status: "in_progress",
-      onboarding_step: "language",
+      onboarding_step: "collect_info",
+      preferred_language: "ms",
       conversation_state: {},
       updated_at: new Date().toISOString(),
     })
@@ -1645,16 +2028,24 @@ async function handleNewUserConversational(user: User): Promise<{ response: stri
 
   const response = `${greeting.ms}!
 
-Saya Kak Ani dari 101Kerja. Saya nak tolong adik cari kerja yang sesuai.
+Saya Kak Ani dari 101Kerja. Kak Ani terus tolong adik cari kerja ya.
 
-Sebelum tu, adik prefer bahasa apa?
-1. Bahasa Malaysia
-2. English
-3. 中文 (Chinese)`;
+Boleh bagitahu:
+- Nama penuh
+- Umur
+- Lelaki/Perempuan
+- Duduk mana (bandar, negeri)
+
+Contoh: "Ahmad, 25, lelaki, Shah Alam Selangor"`;
 
   return {
     response,
-    updatedUser: { ...user, onboarding_status: "in_progress", onboarding_step: "language" },
+    updatedUser: {
+      ...user,
+      onboarding_status: "in_progress",
+      onboarding_step: "collect_info",
+      preferred_language: "ms",
+    },
   };
 }
 
@@ -1667,58 +2058,24 @@ async function handleOnboardingConversational(
   step: string,
 ): Promise<{ response: string; updatedUser: User }> {
   let updatedUser = { ...user };
-  let nextStep = step;
+  let nextStep = step === "language" ? "collect_info" : step;
   let response = "";
 
   const lang = user.preferred_language || "ms";
 
-  console.log(`📍 Onboarding step: ${step}, message: "${message}"`);
+  const effectiveStep = step === "language" ? "collect_info" : step;
+  console.log(`📍 Onboarding step: ${step} (effective: ${effectiveStep}), message: "${message}"`);
 
-  switch (step) {
-    // ========== STEP 1: LANGUAGE ==========
-    case "language":
-      const langResult = await extractLanguageChoice(message);
-      if (langResult) {
-        updatedUser.preferred_language = langResult;
-        nextStep = "collect_info";
+  if (step === "language") {
+    // Backward compatibility with old rows that were left in 'language'.
+    return await handleOnboardingConversational(
+      { ...updatedUser, onboarding_step: "collect_info", preferred_language: updatedUser.preferred_language || "ms" },
+      message,
+      "collect_info",
+    );
+  }
 
-        response = getText(langResult, {
-          ms: `Okay, Bahasa Malaysia!
-
-Boleh bagitahu Kak Ani:
-- Nama penuh
-- Umur
-- Lelaki/Perempuan
-- Duduk mana (bandar, negeri)
-
-Contoh: "Ahmad, 25, lelaki, Shah Alam Selangor"`,
-          en: `Alright, English it is!
-
-Please tell me:
-- Your full name
-- Age
-- Male/Female
-- Where you live (city, state)
-
-Example: "Ahmad, 25, male, Shah Alam Selangor"`,
-          zh: `好的，中文！
-
-请告诉我：
-- 全名
-- 年龄
-- 男/女
-- 住哪里（城市，州）
-
-例如："Ahmad, 25, 男, Shah Alam Selangor"`,
-        });
-      } else {
-        response = `Hmm tak faham la. Pilih bahasa:
-1. Bahasa Malaysia
-2. English
-3. 中文 (Chinese)`;
-      }
-      break;
-
+  switch (effectiveStep) {
     // ========== STEP 2: COLLECT ALL INFO ==========
     case "collect_info": {
       console.log("📝 collect_info: Starting extraction...");
@@ -1744,9 +2101,6 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
             lng: updatedUser.longitude || null,
           };
           const missingNow = getMissingFields(currentInfo);
-          const missingText = missingNow
-            .map((m) => (m === "name" ? "nama" : m === "age" ? "umur" : m === "gender" ? "lelaki/perempuan" : "lokasi"))
-            .join(", ");
 
           let contextForGPT = "";
           if (intent === "question") {
@@ -1778,25 +2132,44 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
         }
       }
 
-      const extracted = await extractAllInfo(message, lang);
-      console.log("📝 collect_info: Extracted:", JSON.stringify(extracted));
+      let extracted = await extractAllInfo(message, lang);
 
-      // MERGE: new extracted data with existing user data
-      // BUT: If we're in location clarification mode, DON'T overwrite name/age/gender!
+      // Context-first parsing: if exactly one slot is missing, focus extraction on that slot
+      // (unless user sends a clearly structured full-profile message).
+      const preMergeInfo: ExtractedInfo = {
+        name: updatedUser.full_name || null,
+        age: updatedUser.age || null,
+        gender: updatedUser.gender || null,
+        city: updatedUser.location_city || null,
+        state: updatedUser.location_state || null,
+        lat: updatedUser.latitude || null,
+        lng: updatedUser.longitude || null,
+      };
+      const missingBefore = getMissingFields(preMergeInfo);
+      if (!isLocationClarification && missingBefore.length === 1) {
+        extracted = constrainExtractionToMissingSlot(extracted, missingBefore[0], message);
+      }
+      if (extracted.state) extracted.state = normalizeStateAlias(extracted.state);
+      console.log("📝 collect_info: Extracted (post-constraint):", JSON.stringify(extracted));
+
+      // Slot-safe merge: stop destructive overwrites unless strong correction signal exists.
+      const slotState = getProfileSlots(updatedUser, convState);
       if (!isLocationClarification) {
-        // Normal flow: merge all fields
-        if (extracted.name) updatedUser.full_name = extracted.name.toUpperCase();
-        if (extracted.age) updatedUser.age = extracted.age;
-        if (extracted.gender) updatedUser.gender = extracted.gender;
+        mergeSlotValue("name", slotState, extracted.name, message);
+        mergeSlotValue("age", slotState, extracted.age, message);
+        mergeSlotValue("gender", slotState, extracted.gender, message);
       } else {
-        // Location clarification: preserve existing user info
         console.log("📝 collect_info: In location clarification mode - preserving user info");
       }
-      // Always merge location fields
-      if (extracted.city) updatedUser.location_city = extracted.city;
-      if (extracted.state) updatedUser.location_state = extracted.state;
-      if (extracted.lat) updatedUser.latitude = extracted.lat;
-      if (extracted.lng) updatedUser.longitude = extracted.lng;
+      if (extracted.city || extracted.state || extracted.lat || extracted.lng) {
+        mergeSlotValue("location", slotState, extracted.city || extracted.state, message);
+      }
+
+      updatedUser = applySlotsToUser(updatedUser, slotState, extracted);
+      updatedUser.conversation_state = preserveShortcodeContext(convState, {
+        ...(updatedUser.conversation_state || {}),
+        profile_slots: slotState,
+      });
 
       // Check what's missing from MERGED user data
       const mergedInfo: ExtractedInfo = {
@@ -1810,6 +2183,12 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
       };
       const missing = getMissingFields(mergedInfo);
       console.log("📝 collect_info: Missing fields:", missing);
+      if (missing.length === 0 && updatedUser.conversation_state) {
+        const cleanedState = { ...updatedUser.conversation_state };
+        delete cleanedState.missing_signature;
+        delete cleanedState.missing_retry_count;
+        updatedUser.conversation_state = cleanedState;
+      }
 
       // Check if user is responding to ambiguous location prompt (reply with number)
       if (convState.ambiguous_location_pending && convState.ambiguous_city && convState.ambiguous_states) {
@@ -1905,11 +2284,11 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
           const cityToLookup = locationExtracted.city || message.trim();
           console.log(`📝 No coords from GPT, trying DB lookup for "${cityToLookup}"...`);
           const dbLookup = await lookupMalaysiaLocation(cityToLookup);
-          if (dbLookup) {
+          if (dbLookup && Number.isFinite(dbLookup.lat) && Number.isFinite(dbLookup.lng)) {
             console.log(`✅ Found "${cityToLookup}" in malaysia_locations: ${dbLookup.state}`);
             locationExtracted = {
               ...locationExtracted,
-              city: locationExtracted.city || cityToLookup,
+              city: locationExtracted.city || dbLookup.city || cityToLookup,
               state: dbLookup.state,
               lat: dbLookup.lat,
               lng: dbLookup.lng,
@@ -1977,26 +2356,46 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
       if (missing.length === 0) {
         // Check if location is ambiguous (exists in multiple states)
         if (extracted.ambiguous && extracted.possible_states && extracted.possible_states.length > 0) {
-          console.log("📝 collect_info: Ambiguous location detected, asking for clarification...");
-
-          // Store ambiguous location info in conversation_state for when user replies with number
+          const uniqueStates = [...new Set(extracted.possible_states.map((s) => normalizeStateAlias(s)))];
           const locationText = mergedInfo.city || mergedInfo.state;
-          updatedUser.location_city = undefined;
-          updatedUser.location_state = undefined;
-          updatedUser.latitude = undefined;
-          updatedUser.longitude = undefined;
-          updatedUser.conversation_state = preserveShortcodeContext(updatedUser.conversation_state || {}, {
-            ambiguous_location_pending: true,
-            ambiguous_city: locationText,
-            ambiguous_states: extracted.possible_states,
-          });
 
-          response = getText(lang, {
-            ms: `"${locationText}" ni ada kat beberapa tempat.\n\nAdik duduk kat negeri mana?\n${extracted.possible_states.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n\nBalas nombor atau tulis nama penuh (contoh: "${locationText}, Selangor")`,
-            en: `"${locationText}" exists in multiple areas.\n\nWhich state do you live in?\n${extracted.possible_states.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n\nReply with the number or full name (e.g., "${locationText}, Selangor")`,
-            zh: `"${locationText}"在多个地区都有。\n\n你住在哪个州？\n${extracted.possible_states.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n\n回复数字或完整地名（如："${locationText}, Selangor"）`,
-          });
-          // Stay in collect_info, don't change step
+          // Auto-resolve if ambiguity collapses to one state candidate.
+          if (uniqueStates.length === 1 && locationText) {
+            const autoResolved = await lookupMalaysiaLocation(locationText, uniqueStates[0]);
+            if (autoResolved && Number.isFinite(autoResolved.lat) && Number.isFinite(autoResolved.lng)) {
+              console.log(
+                `📝 collect_info: Auto-resolved single-state location "${locationText}" -> ${uniqueStates[0]}`,
+              );
+              updatedUser.location_city = autoResolved.city || locationText;
+              updatedUser.location_state = autoResolved.state;
+              updatedUser.latitude = autoResolved.lat;
+              updatedUser.longitude = autoResolved.lng;
+            }
+          }
+
+          if (updatedUser.latitude && updatedUser.longitude && updatedUser.location_state) {
+            // Continue as resolved; no clarification prompt needed.
+          } else {
+            console.log("📝 collect_info: Ambiguous location detected, asking for clarification...");
+
+            // Store ambiguous location info in conversation_state for when user replies with number
+            updatedUser.location_city = undefined;
+            updatedUser.location_state = undefined;
+            updatedUser.latitude = undefined;
+            updatedUser.longitude = undefined;
+            updatedUser.conversation_state = preserveShortcodeContext(updatedUser.conversation_state || {}, {
+              ambiguous_location_pending: true,
+              ambiguous_city: locationText,
+              ambiguous_states: uniqueStates,
+            });
+
+            response = getText(lang, {
+              ms: `"${locationText}" ni ada kat beberapa tempat.\n\nAdik duduk kat negeri mana?\n${uniqueStates.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n\nBalas nombor atau tulis nama penuh (contoh: "${locationText}, Selangor")`,
+              en: `"${locationText}" exists in multiple areas.\n\nWhich state do you live in?\n${uniqueStates.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n\nReply with the number or full name (e.g., "${locationText}, Selangor")`,
+              zh: `"${locationText}"在多个地区都有。\n\n你住在哪个州？\n${uniqueStates.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n\n回复数字或完整地名（如："${locationText}, Selangor"）`,
+            });
+            // Stay in collect_info, don't change step
+          }
         } else if ((mergedInfo.city || mergedInfo.state) && (!mergedInfo.lat || !mergedInfo.lng)) {
           // Check if we have location text but no coordinates (GPT couldn't geocode)
           console.log("📝 collect_info: Location provided but no coordinates, asking for clarification...");
@@ -2067,11 +2466,57 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
                   })
                 : matchResult.message;
           }
+
+          // Safety net: if ambiguity auto-resolved and no response was built yet, continue to job matching.
+          if (!response && updatedUser.location_state && updatedUser.latitude && updatedUser.longitude) {
+            const firstName = updatedUser.full_name?.split(" ")[0] || "";
+            const shortcodeJobs = (updatedUser.conversation_state || {}).shortcode_jobs;
+
+            if (shortcodeJobs && shortcodeJobs.length > 0) {
+              updatedUser.onboarding_status = "matching";
+              updatedUser.conversation_state = { matched_jobs: shortcodeJobs, current_job_index: 0 };
+              nextStep = "viewing_jobs";
+              response = getText(lang, {
+                ms: `Ok noted!\nNama: ${updatedUser.full_name}\nUmur: ${updatedUser.age}\nJantina: ${updatedUser.gender === "male" ? "Lelaki" : "Perempuan"}\nLokasi: ${updatedUser.location_city || updatedUser.location_state}\n\nBoleh pilih kerja dari senarai tadi. Balas nombor untuk mohon, atau 'lagi' untuk lebih banyak.`,
+                en: `Ok noted!\nName: ${updatedUser.full_name}\nAge: ${updatedUser.age}\nGender: ${updatedUser.gender === "male" ? "Male" : "Female"}\nLocation: ${updatedUser.location_city || updatedUser.location_state}\n\nYou can now select from the jobs listed earlier. Reply with a number to apply, or 'more' for more options.`,
+                zh: `好的！\n姓名：${updatedUser.full_name}\n年龄：${updatedUser.age}\n性别：${updatedUser.gender === "male" ? "男" : "女"}\n地点：${updatedUser.location_city || updatedUser.location_state}\n\n现在可以从之前的列表中选择工作。回复数字申请，或「更多」查看更多。`,
+              });
+            } else {
+              const matchResult = await findAndPresentJobsConversational(updatedUser);
+              updatedUser.onboarding_status = "matching";
+              updatedUser.conversation_state = buildPostSearchState(matchResult);
+              nextStep = "viewing_jobs";
+              const jobCount = matchResult.jobs.length;
+              response =
+                jobCount > 0
+                  ? getText(lang, {
+                      ms: `Okay ${firstName}, jap ye Kak Ani carikan...\n\nNi ${jobCount} kerja dekat dengan adik:\n\n${matchResult.message}`,
+                      en: `Alright ${firstName}, let me check...\n\nFound ${jobCount} jobs near you:\n\n${matchResult.message}`,
+                      zh: `好的${firstName}，让我找找...\n\n找到${jobCount}个附近的工作：\n\n${matchResult.message}`,
+                    })
+                  : matchResult.message;
+            }
+          }
         }
       } else {
         // Still missing some info - ask for it
         console.log("📝 collect_info: Asking for missing info...");
-        response = askForMissingInfo(missing, lang, mergedInfo);
+        const missingSignature = [...missing].sort().join("|");
+        const prevSignature = convState.missing_signature || "";
+        const retryCount = prevSignature === missingSignature ? (convState.missing_retry_count || 0) + 1 : 1;
+
+        if (retryCount >= 3) {
+          const nextField = missing[0] || "location";
+          response = askOneMissingField(nextField, lang);
+        } else {
+          response = askForMissingInfo(missing, lang, mergedInfo);
+        }
+
+        updatedUser.conversation_state = preserveShortcodeContext(updatedUser.conversation_state || convState, {
+          ...(updatedUser.conversation_state || convState),
+          missing_signature: missingSignature,
+          missing_retry_count: retryCount,
+        });
       }
       break;
     }
@@ -2079,9 +2524,28 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
     // ========== STEP: UPDATE LOCATION ONLY ==========
     case "update_location":
       console.log("📝 update_location: Extracting location only...");
+      const updateLocConvState = user.conversation_state || {};
+      const updateRecentMsgs: RecentMessage[] = updateLocConvState.recent_messages || [];
+
+      // Context-first handling: user may ask a question mid-flow.
+      const { intent: updateIntent, confidence: updateConfidence } = await classifyIntent(
+        message,
+        "update_location",
+        lang,
+      );
+      if (updateIntent === "question" && updateConfidence > 0.6) {
+        const ctx = `User is currently updating location but asked a question. Answer briefly (1-2 lines), then ask for their current city and state so you can continue finding nearby jobs.`;
+        const gptResponse = await generateKakAniResponse(user, message, ctx, updateRecentMsgs);
+        const updatedRecent = addToRecentMessages(updateLocConvState, message, gptResponse);
+        updatedUser.conversation_state = preserveShortcodeContext(updateLocConvState, {
+          ...updateLocConvState,
+          recent_messages: updatedRecent,
+        });
+        response = gptResponse;
+        break;
+      }
 
       // Check if user is responding to ambiguous location prompt (reply with number)
-      const updateLocConvState = user.conversation_state || {};
       if (
         updateLocConvState.ambiguous_location_pending &&
         updateLocConvState.ambiguous_city &&
@@ -2156,11 +2620,11 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
           const cityToLookup = locationOnly.city || message.trim();
           console.log(`📝 No coords from GPT, trying DB lookup for "${cityToLookup}"...`);
           const dbLookup = await lookupMalaysiaLocation(cityToLookup);
-          if (dbLookup) {
+          if (dbLookup && Number.isFinite(dbLookup.lat) && Number.isFinite(dbLookup.lng)) {
             console.log(`✅ Found "${cityToLookup}" in malaysia_locations: ${dbLookup.state}`);
             locationOnly = {
               ...locationOnly,
-              city: locationOnly.city || cityToLookup,
+              city: locationOnly.city || dbLookup.city || cityToLookup,
               state: dbLookup.state,
               lat: dbLookup.lat,
               lng: dbLookup.lng,
@@ -2220,27 +2684,65 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
           locationExtracted.possible_states &&
           locationExtracted.possible_states.length > 0
         ) {
-          console.log("📝 update_location: Ambiguous location detected");
-
-          // Store ambiguous location info in conversation_state for when user replies with number
           const locationText = locationExtracted.city || locationExtracted.state;
-          updatedUser.location_city = undefined;
-          updatedUser.location_state = undefined;
-          updatedUser.latitude = undefined;
-          updatedUser.longitude = undefined;
-          updatedUser.conversation_state = {
-            ...updatedUser.conversation_state,
-            ambiguous_location_pending: true,
-            ambiguous_city: locationText,
-            ambiguous_states: locationExtracted.possible_states,
-          };
+          const uniqueStates = [...new Set(locationExtracted.possible_states.map((s) => normalizeStateAlias(s)))];
 
-          response = getText(lang, {
-            ms: `"${locationText}" ni ada kat beberapa tempat.\n\nAdik duduk kat negeri mana?\n${locationExtracted.possible_states.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n\nBalas nombor atau tulis nama penuh (contoh: "${locationText}, Selangor")`,
-            en: `"${locationText}" exists in multiple areas.\n\nWhich state do you live in?\n${locationExtracted.possible_states.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n\nReply with the number or full name (e.g., "${locationText}, Selangor")`,
-            zh: `"${locationText}"在多个地区都有。\n\n你住在哪个州？\n${locationExtracted.possible_states.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n\n回复数字或完整地名（如："${locationText}, Selangor"）`,
-          });
-          // Stay in update_location step
+          if (locationText && uniqueStates.length === 1) {
+            const autoResolved = await lookupMalaysiaLocation(locationText, uniqueStates[0]);
+            if (autoResolved && Number.isFinite(autoResolved.lat) && Number.isFinite(autoResolved.lng)) {
+              updatedUser.location_city = autoResolved.city || locationText;
+              updatedUser.location_state = autoResolved.state;
+              updatedUser.latitude = autoResolved.lat;
+              updatedUser.longitude = autoResolved.lng;
+              locationExtracted.ambiguous = false;
+              locationExtracted.possible_states = undefined;
+              locationExtracted.lat = autoResolved.lat;
+              locationExtracted.lng = autoResolved.lng;
+              locationExtracted.state = autoResolved.state;
+              locationExtracted.city = autoResolved.city || locationText;
+              console.log(
+                `📝 update_location: Auto-resolved single-state location "${locationText}" -> ${uniqueStates[0]}`,
+              );
+            }
+          }
+
+          if (locationExtracted.ambiguous) {
+            console.log("📝 update_location: Ambiguous location detected");
+            updatedUser.location_city = undefined;
+            updatedUser.location_state = undefined;
+            updatedUser.latitude = undefined;
+            updatedUser.longitude = undefined;
+            updatedUser.conversation_state = {
+              ...updatedUser.conversation_state,
+              ambiguous_location_pending: true,
+              ambiguous_city: locationText,
+              ambiguous_states: uniqueStates,
+            };
+
+            response = getText(lang, {
+              ms: `"${locationText}" ni ada kat beberapa tempat.\n\nAdik duduk kat negeri mana?\n${uniqueStates.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n\nBalas nombor atau tulis nama penuh (contoh: "${locationText}, Selangor")`,
+              en: `"${locationText}" exists in multiple areas.\n\nWhich state do you live in?\n${uniqueStates.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n\nReply with the number or full name (e.g., "${locationText}, Selangor")`,
+              zh: `"${locationText}"在多个地区都有。\n\n你住在哪个州？\n${uniqueStates.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n\n回复数字或完整地名（如："${locationText}, Selangor"）`,
+            });
+            // Stay in update_location step
+          } else if (locationExtracted.lat && locationExtracted.lng) {
+            // Ambiguity auto-resolved into a single state.
+            const matchResult = await findAndPresentJobsConversational(updatedUser);
+            updatedUser.onboarding_status = "matching";
+            updatedUser.conversation_state = buildPostSearchState(matchResult);
+            nextStep = "viewing_jobs";
+
+            const firstName = updatedUser.full_name?.split(" ")[0] || "";
+            const jobCount = matchResult.jobs.length;
+            response =
+              jobCount > 0
+                ? getText(lang, {
+                    ms: `Ok ${firstName}, lokasi dah dikemaskini!\n\nNi ${jobCount} kerja dekat dengan adik:\n\n${matchResult.message}`,
+                    en: `Ok ${firstName}, location updated!\n\nFound ${jobCount} jobs near you:\n\n${matchResult.message}`,
+                    zh: `好的${firstName}，位置已更新！\n\n找到${jobCount}个附近的工作：\n\n${matchResult.message}`,
+                  })
+                : matchResult.message;
+          }
         } else if (locationExtracted.lat && locationExtracted.lng) {
           // Got location with coordinates - proceed to job matching
           console.log("📝 update_location: Location complete, finding jobs...");
@@ -2317,86 +2819,124 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
 // ============================================
 // MALAYSIA LOCATION TABLE LOOKUP
 // ============================================
-async function lookupMalaysiaLocation(
-  city: string,
-  state?: string,
-): Promise<{ lat: number; lng: number; state: string } | null> {
-  try {
-    // Normalize the city name for comparison
-    let normalizedCity = city.trim().toLowerCase();
+interface LocationResolveResult {
+  lat: number;
+  lng: number;
+  state: string;
+  city?: string;
+  ambiguous_states?: string[];
+}
 
-    // Common spelling alternatives / misspellings
-    const spellingMap: { [key: string]: string } = {
-      kelang: "klang",
-      kelong: "klang",
-      "pulau pinang": "george town",
-      penang: "george town",
-      malacca: "melaka",
-      melacca: "melaka",
-      johore: "johor",
-      "johore bahru": "johor bahru",
-      seremban2: "seremban",
-      "seremban 2": "seremban",
-      "puchong jaya": "puchong",
-      subang: "subang jaya",
-      damansara: "petaling jaya",
-      "kota damansara": "petaling jaya",
-      ss2: "petaling jaya",
-      ss15: "subang jaya",
-      usj: "subang jaya",
-      "setia alam": "shah alam",
-      "setia city": "shah alam",
-    };
+interface MalaysiaLocationRow {
+  name: string;
+  state: string;
+  latitude: string;
+  longitude: string;
+}
 
-    // Apply spelling correction if match found
-    if (spellingMap[normalizedCity]) {
-      console.log(`📍 Spelling correction: "${normalizedCity}" → "${spellingMap[normalizedCity]}"`);
-      normalizedCity = spellingMap[normalizedCity];
-    }
+function normalizeLookupCity(city: string): string {
+  let normalizedCity = normalizeLocationInput(city);
+  const spellingMap: { [key: string]: string } = {
+    kelang: "klang",
+    kelong: "klang",
+    "pulau pinang": "george town",
+    penang: "george town",
+    malacca: "melaka",
+    melacca: "melaka",
+    johore: "johor",
+    "johore bahru": "johor bahru",
+    seremban2: "seremban",
+    "seremban 2": "seremban",
+    "puchong jaya": "puchong",
+    subang: "subang jaya",
+    damansara: "petaling jaya",
+    "kota damansara": "petaling jaya",
+    ss2: "petaling jaya",
+    ss15: "subang jaya",
+    usj: "subang jaya",
+    "setia alam": "shah alam",
+    "setia city": "shah alam",
+  };
+  if (spellingMap[normalizedCity]) {
+    console.log(`📍 Spelling correction: "${normalizedCity}" → "${spellingMap[normalizedCity]}"`);
+    normalizedCity = spellingMap[normalizedCity];
+  }
+  return normalizedCity;
+}
 
-    // Query the malaysia_locations table
-    let query = supabase
+async function getMalaysiaLocationCandidates(city: string): Promise<MalaysiaLocationRow[]> {
+  const normalizedCity = normalizeLookupCity(city);
+  if (!normalizedCity) return [];
+
+  let { data, error } = await supabase
+    .from("malaysia_locations")
+    .select("name, state, latitude, longitude")
+    .ilike("name", normalizedCity)
+    .limit(20);
+
+  if (error) {
+    console.error("❌ malaysia_locations exact lookup error:", error);
+    return [];
+  }
+
+  if (!data || data.length === 0) {
+    const pattern = `%${normalizedCity.split(/\s+/).filter(Boolean).join("%")}%`;
+    const fuzzy = await supabase
       .from("malaysia_locations")
       .select("name, state, latitude, longitude")
-      .ilike("name", normalizedCity);
+      .ilike("name", pattern)
+      .limit(30);
 
-    // If state is provided, filter by state too
-    if (state) {
-      query = query.ilike("state", state.trim());
+    if (fuzzy.error) {
+      console.error("❌ malaysia_locations fuzzy lookup error:", fuzzy.error);
+      return [];
     }
+    data = fuzzy.data || [];
+  }
 
-    const { data, error } = await query.limit(5);
+  const dedup = new Map<string, MalaysiaLocationRow>();
+  for (const row of (data || []) as MalaysiaLocationRow[]) {
+    dedup.set(`${normalizeLooseText(row.name)}::${normalizeLooseText(row.state)}`, row);
+  }
+  return Array.from(dedup.values());
+}
 
-    if (error) {
-      console.error("❌ malaysia_locations lookup error:", error);
+async function lookupMalaysiaLocation(city: string, state?: string): Promise<LocationResolveResult | null> {
+  try {
+    const candidates = await getMalaysiaLocationCandidates(city);
+    if (candidates.length === 0) {
+      console.log(`📍 DB Lookup: "${city}" not found in malaysia_locations table`);
       return null;
     }
 
-    if (data && data.length > 0) {
-      // If only one match, use it
-      if (data.length === 1) {
-        console.log(
-          `📍 DB Lookup: Found "${data[0].name}" in ${data[0].state} (${data[0].latitude}, ${data[0].longitude})`,
-        );
-        return {
-          lat: parseFloat(data[0].latitude),
-          lng: parseFloat(data[0].longitude),
-          state: data[0].state,
-        };
-      }
+    let filtered = candidates;
+    if (state) {
+      const normalizedState = normalizeLooseText(normalizeStateAlias(state));
+      filtered = filtered.filter((c) => normalizeLooseText(c.state).includes(normalizedState));
+    }
 
-      // Multiple matches - if state was provided, we already filtered
-      // Otherwise, return the first match but log the ambiguity
-      console.log(`📍 DB Lookup: Found ${data.length} matches for "${city}", using first: ${data[0].state}`);
+    if (filtered.length === 0) {
+      return null;
+    }
+
+    const uniqueStates = [...new Set(filtered.map((c) => c.state))];
+    if (uniqueStates.length === 1) {
+      const picked = filtered[0];
       return {
-        lat: parseFloat(data[0].latitude),
-        lng: parseFloat(data[0].longitude),
-        state: data[0].state,
+        lat: parseFloat(picked.latitude),
+        lng: parseFloat(picked.longitude),
+        state: picked.state,
+        city: picked.name,
       };
     }
 
-    console.log(`📍 DB Lookup: "${city}" not found in malaysia_locations table`);
-    return null;
+    // Not auto-resolvable yet: return ambiguity signal for caller to clarify.
+    return {
+      lat: NaN,
+      lng: NaN,
+      state: "",
+      ambiguous_states: uniqueStates,
+    };
   } catch (error) {
     console.error("❌ malaysia_locations lookup exception:", error);
     return null;
@@ -2625,12 +3165,21 @@ Examples:
   if (merged.city && !merged.ambiguous) {
     const dbLookup = await lookupMalaysiaLocation(merged.city, merged.state || undefined);
     if (dbLookup) {
-      console.log(`✅ Using DB coordinates for "${merged.city}": (${dbLookup.lat}, ${dbLookup.lng})`);
-      merged.lat = dbLookup.lat;
-      merged.lng = dbLookup.lng;
-      // Also update state if DB has it and we didn't have one
-      if (!merged.state && dbLookup.state) {
-        merged.state = dbLookup.state;
+      if (Number.isFinite(dbLookup.lat) && Number.isFinite(dbLookup.lng)) {
+        console.log(`✅ Using DB coordinates for "${merged.city}": (${dbLookup.lat}, ${dbLookup.lng})`);
+        merged.lat = dbLookup.lat;
+        merged.lng = dbLookup.lng;
+        if (!merged.state && dbLookup.state) merged.state = dbLookup.state;
+        if (dbLookup.city) merged.city = dbLookup.city;
+        merged.ambiguous = false;
+        merged.possible_states = undefined;
+      } else if (dbLookup.ambiguous_states && dbLookup.ambiguous_states.length > 1) {
+        // Keep conversation deterministic: mark ambiguity only when >1 state remains.
+        merged.ambiguous = true;
+        merged.possible_states = dbLookup.ambiguous_states;
+        merged.lat = null;
+        merged.lng = null;
+        merged.state = null;
       }
     } else if (!merged.lat || !merged.lng) {
       // DB lookup failed and GPT didn't provide coords either
@@ -2804,6 +3353,14 @@ function extractInfoRuleBased(message: string): ExtractedInfo {
     ["pahang", { city: "Kuantan", state: "Pahang" }],
     ["perlis", { city: "Kangar", state: "Perlis" }],
     ["klang", { city: "Klang", state: "Selangor" }],
+    ["kapar", { city: "Kapar", state: "Selangor" }],
+    ["banting", { city: "Banting", state: "Selangor" }],
+    ["nilai", { city: "Nilai", state: "Negeri Sembilan" }],
+    ["nilai impian", { city: "Nilai", state: "Negeri Sembilan" }],
+    ["kepong", { city: "Kepong", state: "Kuala Lumpur" }],
+    ["jelebu", { city: "Jelebu", state: "Negeri Sembilan" }],
+    ["jalan kebun", { city: "Jalan Kebun", state: "Selangor" }],
+    ["puchong indah", { city: "Puchong", state: "Selangor" }],
     ["kedah", { city: "Alor Setar", state: "Kedah" }],
     ["perak", { city: "Ipoh", state: "Perak" }],
     ["johor", { city: "Johor Bahru", state: "Johor" }],
@@ -2902,6 +3459,24 @@ function extractInfoRuleBased(message: string): ExtractedInfo {
         "help",
         "tolong",
         "bantuan",
+        "lagi",
+        "more",
+        "semula",
+        "restart",
+        "rumah",
+        "scam",
+        "duduk",
+        "area",
+        "lokasi",
+        "location",
+        "jalan",
+        "jln",
+        "kg",
+        "kampung",
+        "nilai",
+        "kepong",
+        "puchong",
+        "klang",
       ];
       const firstWord = firstPart.split(/\s+/)[0].toLowerCase();
 
@@ -2929,6 +3504,35 @@ function getMissingFields(info: ExtractedInfo): string[] {
   if (!info.gender) missing.push("gender");
   if (!info.city && !info.state) missing.push("location");
   return missing;
+}
+
+function askOneMissingField(field: string, lang: string): string {
+  if (field === "name") {
+    return getText(lang, {
+      ms: `Takpe, kita buat satu-satu ya. Nama penuh adik apa?`,
+      en: `No worries, let's do it one by one. What's your full name?`,
+      zh: `没关系，我们一步一步来。请告诉我您的全名？`,
+    });
+  }
+  if (field === "age") {
+    return getText(lang, {
+      ms: `Baik, sekarang umur adik berapa?`,
+      en: `Great, how old are you now?`,
+      zh: `好的，您今年几岁？`,
+    });
+  }
+  if (field === "gender") {
+    return getText(lang, {
+      ms: `Sekarang jantina adik: lelaki atau perempuan?`,
+      en: `Now your gender: male or female?`,
+      zh: `现在请告诉我您的性别：男或女？`,
+    });
+  }
+  return getText(lang, {
+    ms: `Tinggal lokasi je. Adik duduk kat mana? (bandar + negeri)\n\nContoh: "Nilai, Negeri Sembilan"\nAtau boleh share pin lokasi WhatsApp.`,
+    en: `Only location left. Where do you live now? (city + state)\n\nExample: "Nilai, Negeri Sembilan"\nOr share your WhatsApp location pin.`,
+    zh: `只差地点了。您现在住哪里？（城市 + 州）\n\n例如："Nilai, Negeri Sembilan"\n也可以分享 WhatsApp 位置。`,
+  });
 }
 
 // ============================================
@@ -3356,6 +3960,58 @@ async function handleMatchingConversational(
       response: jobsMessage,
       updatedUser: { ...user, conversation_state: newConvState },
     };
+  }
+
+  // Context-aware relocation search while in matching state.
+  // Example: "ada kerja dekat KL?" / "find jobs in Johor".
+  const relocationSearchIntent =
+    /(\bcari\b|\bfind\b|\bjob\b|\bkerja\b)/i.test(message) &&
+    /(\bdekat\b|\bkat\b|\bnear\b|\bin\b|\blokasi\b|\blocation\b|\bjauh\b|\bfar\b|\barea\b)/i.test(message);
+  if (relocationSearchIntent) {
+    const extractedRelocation = await extractAllInfo(message, lang);
+    if ((extractedRelocation.city || extractedRelocation.state) && extractedRelocation.lat && extractedRelocation.lng) {
+      user.location_city = extractedRelocation.city || user.location_city;
+      user.location_state = extractedRelocation.state || user.location_state;
+      user.latitude = extractedRelocation.lat;
+      user.longitude = extractedRelocation.lng;
+
+      const relocated = await findAndPresentJobsConversational(user);
+      const newState = buildPostSearchState(relocated);
+      await supabase
+        .from("applicants")
+        .update({
+          onboarding_status: "matching",
+          onboarding_step: "viewing_jobs",
+          location_city: user.location_city,
+          location_state: user.location_state,
+          latitude: user.latitude,
+          longitude: user.longitude,
+          conversation_state: newState,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+
+      const firstName = user.full_name?.split(" ")[0] || "";
+      const jobCount = relocated.jobs.length;
+      const relocationResponse =
+        jobCount > 0
+          ? getText(lang, {
+              ms: `Ok ${firstName}, Kak Ani cari dekat ${user.location_city || user.location_state}.\n\nJumpa ${jobCount} kerja:\n\n${relocated.message}`,
+              en: `Ok ${firstName}, searching near ${user.location_city || user.location_state}.\n\nFound ${jobCount} jobs:\n\n${relocated.message}`,
+              zh: `好的${firstName}，正在${user.location_city || user.location_state}附近搜索。\n\n找到${jobCount}个工作：\n\n${relocated.message}`,
+            })
+          : relocated.message;
+
+      return {
+        response: relocationResponse,
+        updatedUser: {
+          ...user,
+          onboarding_status: "matching",
+          onboarding_step: "viewing_jobs",
+          conversation_state: newState,
+        },
+      };
+    }
   }
 
   // === INTENT CLASSIFICATION before fallback ===
