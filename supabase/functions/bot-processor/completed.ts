@@ -103,7 +103,13 @@ export async function handleCompletedUserConversational(
     if (nlu.contextualResponse) {
       gptResp = nlu.contextualResponse
     } else {
-      const ctx = `User has completed onboarding and is asking a question. Their profile: name=${user.full_name}, location=${user.location_city}, ${user.location_state}. Answer their question helpfully and briefly. If it's about finding jobs, tell them to say "cari kerja" or "find job". Keep it short.`
+      // Build context — include last selected job if available
+      let ctx = `User has completed onboarding and is asking a question. Their profile: name=${user.full_name}, location=${user.location_city}, ${user.location_state}.`
+      const lastJob = convState.last_selected_job
+      if (lastJob) {
+        ctx += `\n\nThe user just selected this job:\n- Title: ${lastJob.title}\n- Company: ${lastJob.company}\n- Location: ${lastJob.location_city || ''}, ${lastJob.location_state || ''}\n- Salary: ${lastJob.salary_range || 'Not specified'}\n- Type: ${lastJob.job_type || 'Not specified'}\n- Apply URL: ${lastJob.url || 'N/A'}\n\nIf the user is asking about this job (e.g., full time/part time, salary, location), answer using the info above. If the job_type is null or 'Not specified', say you don't have that info and suggest they check the apply link.`
+      }
+      ctx += ` Answer their question helpfully and briefly. Keep it short.`
       gptResp = await generateKakAniResponse(user, message, ctx, recentMsgs)
     }
 
