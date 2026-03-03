@@ -58,7 +58,28 @@ export async function generateKakAniResponse(
 //   2. understandMessage().detectedLanguage in nlu.ts (NLU auto-detect)
 
 export async function detectJobSearchIntent(message: string, lang: string): Promise<boolean> {
-  const lower = message.toLowerCase()
-  const searchWords = ['cari', 'kerja', 'job', 'keje', 'find', 'search', '找工作', '工作', 'pekerjaan']
-  return searchWords.some(word => lower.includes(word))
+  const lower = message.toLowerCase().trim()
+
+  // Exclude messages that are clearly questions
+  if (lower.includes('?') || /^(apa|bila|berapa|adakah|macam mana|kenapa|siapa|is |what |how |when |where |who |why |does |do |can )/.test(lower)) {
+    return false
+  }
+
+  // Strong signals: action phrases that clearly indicate wanting to search
+  const strongPhrases = [
+    'cari kerja', 'cari keje', 'nak kerja', 'nak keje', 'nak cari',
+    'find job', 'find work', 'search job', 'job search',
+    '找工作', '找工', 'cari pekerjaan'
+  ]
+  if (strongPhrases.some(phrase => lower.includes(phrase))) {
+    return true
+  }
+
+  // Action words alone (without "kerja") — only if the message is short (likely a command)
+  const actionWords = ['cari', 'find', 'search']
+  if (lower.split(/\s+/).length <= 3 && actionWords.some(word => lower.includes(word))) {
+    return true
+  }
+
+  return false
 }
