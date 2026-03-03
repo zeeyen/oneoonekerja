@@ -1,37 +1,62 @@
 
 
-## Problem Analysis
+## Fix: "Ya" Not Expanding to 20km + Unrecognized Input Breaking Expand Flow
 
-Two bugs causing the bot to mishandle "Kerja nie part time atau full time?":
+### What's Happening
 
-### Bug 1: `detectJobSearchIntent` is too broad
-In `gpt.ts` line 62, the function matches on individual words like `'kerja'`, `'job'`. So "Kerja nie part time atau full time?" triggers a new job search because it contains "kerja". This check runs BEFORE NLU classification in `completed.ts` (line 28-52), so the question never reaches the GPT-powered intent classifier.
+The conversation flow breaks at two points:
 
-### Bug 2: No job context after selection
-When a user selects a job in `matching.ts` (line 186-190), `conversation_state` is cleared to `{}` and status set to `completed`. The next message hits `completed.ts`, which has zero context about the previously selected job to answer questions about it.
+1. Bot asks "expand to 20km? ya/tidak" but when user replies with something unexpected like "Banting ?", the bot loses track that it was waiting for a yes/no answer. Instead of re-asking, it resets everything and tells the user to say "cari kerja".
 
----
+2. When user then says "cari kerja", the bot starts a fresh search at 10km (ignoring that 10km already failed), finds nothing again, and asks about 20km again -- creating a loop.
 
-## Fix Plan
+3. When user finally says "ya", the bot has already forgotten about the expand question and just says "Want to find a job? Say 'cari kerja'".
 
-### 1. Fix `detectJobSearchIntent` in `gpt.ts`
-Make it require stronger signals — not just a single keyword like "kerja". Rules:
-- Require an **action word** (`cari`, `find`, `search`) OR a **compound phrase** (`cari kerja`, `nak kerja`, `find job`)
-- Exclude messages that are clearly **questions** (contain `?`, or start with question words like `apa`, `bila`, `berapa`, `adakah`, `is`, `what`, `how`)
-- Single word "kerja" in a sentence should NOT trigger search
+### The Fix (1 file)
 
-### 2. Preserve last selected job in `conversation_state` after selection
-In `matching.ts`, when a job is selected (around line 186-190), instead of clearing `conversation_state` to `{}`, keep a `last_selected_job` reference:
+**`supabase/functions/bot-processor/index.ts`**
+
+Two changes in `handleMatchingConversational`:
+
+**Change 1: Re-prompt on unrecognized input during expand question (~line 2923)**
+
+When `expand_search_pending` is true and the user says something that isn't "ya" or "tidak", instead of falling through to the empty-jobs handler, re-ask the expand question clearly.
+
 ```
-conversation_state: { last_selected_job: { title, company, location, salary, job_type, url } }
+// Current: falls through silently, hits empty-jobs handler, resets state
+// After: re-ask the yes/no question
+if (convState.expand_search_pending) {
+  ...
+  if (isYes) { ... }
+  else if (isNo) { ... }
+  else {
+    // Unrecognized reply -- gently re-ask
+    const currentRadius = convState.current_radius || 10
+    const nextRadius = currentRadius < 20 ? 20 : 50
+    return { response: getText(lang, {
+      ms: `Maaf, Kak Ani tak faham. Nak cari kerja dalam radius ${nextRadius}km?\n\nBalas 'ya' atau 'tidak'.`,
+      en: `Sorry, I didn't understand. Search within ${nextRadius}km?\n\nReply 'yes' or 'no'.`,
+      zh: `抱歉，我没听懂。要搜索${nextRadius}公里内的工作吗？\n\n回复"是"或"不是"。`
+    }), updatedUser: user }
+  }
+}
 ```
 
-### 3. Pass job context to GPT in `completed.ts` question handler
-In the `question` branch (line 100-117), check if `convState.last_selected_job` exists and include it in the GPT context prompt so Kak Ani can answer questions like "is it full time?" with actual job data.
+**Change 2: Use remembered radius when "cari kerja" triggers a new search (~line 2935)**
 
-### Files Changed
-- `supabase/functions/bot-processor/gpt.ts` — Tighten `detectJobSearchIntent`
-- `supabase/functions/bot-processor/matching.ts` — Preserve `last_selected_job` in state after selection
-- `supabase/functions/bot-processor/completed.ts` — Include last selected job context when answering questions
-- Redeploy edge function
+In the empty-jobs handler where `detectJobSearchIntent` triggers a new search, check if there was a previous failed radius and start from the next tier (e.g., 20km) instead of always defaulting to 10km.
+
+```
+// Current: findAndPresentJobsConversational(user) -- always 10km
+// After: use previous radius context if available
+const lastRadius = convState.current_radius || convState.last_search_radius || 10
+const searchRadius = lastRadius < 20 ? 20 : (lastRadius < 50 ? 50 : 10)
+const searchResult = await findAndPresentJobsConversational(user, searchRadius)
+```
+
+### Result
+
+- "Banting ?" during expand prompt: bot re-asks "ya atau tidak?" instead of breaking the flow
+- "cari kerja" after a failed 10km search: searches at 20km directly instead of repeating 10km
+- "ya" to expand question: works correctly because state is preserved
 

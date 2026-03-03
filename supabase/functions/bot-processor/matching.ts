@@ -182,10 +182,21 @@ export async function handleMatchingConversational(
       // Save job selection to database
       await saveJobSelection(user.id, selectedJob, applyUrl)
 
-      // Update user status
+      // Update user status — preserve last selected job for follow-up questions
+      const lastSelectedJob = {
+        title: selectedJob.title,
+        company: selectedJob.company,
+        location_city: selectedJob.location_city,
+        location_state: selectedJob.location_state,
+        salary_range: selectedJob.salary_range,
+        job_type: selectedJob.job_type || null,
+        url: applyUrl,
+        external_job_id: selectedJob.external_job_id || null
+      }
+      const completedState = { last_selected_job: lastSelectedJob }
       await supabase.from('applicants').update({
         onboarding_status: 'completed',
-        conversation_state: {},
+        conversation_state: completedState,
         updated_at: new Date().toISOString()
       }).eq('id', user.id)
 
@@ -199,7 +210,7 @@ ms: `Best! Adik pilih:\n\n*${displayTitle}* di *${selectedJob.company}*\n📍 ${
 
       return {
         response,
-        updatedUser: { ...user, onboarding_status: 'completed', conversation_state: {} }
+        updatedUser: { ...user, onboarding_status: 'completed', conversation_state: completedState }
       }
     }
   }
