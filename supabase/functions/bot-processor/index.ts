@@ -189,14 +189,6 @@ function getText(lang: string, texts: { ms: string; en: string; zh: string }): s
   return texts.ms;
 }
 
-function normalizeStructuredMessage(message: string): string {
-  return message
-    .replace(/[|;]+/g, ", ")
-    .replace(/(?<=\p{L}|\p{N})\.(?=\p{L}|\p{N})/gu, ", ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 // ============================================
 // TYPES
 // ============================================
@@ -245,13 +237,6 @@ interface ExtractedInfo {
   lng: number | null;
   ambiguous?: boolean; // True if location name exists in multiple states
   possible_states?: string[]; // List of states where this location exists
-}
-
-interface ExtractionOptions {
-  allowName?: boolean;
-  allowAge?: boolean;
-  allowGender?: boolean;
-  allowLocation?: boolean;
 }
 
 interface MatchedJob {
@@ -1061,149 +1046,6 @@ function preserveShortcodeContext(
   return newState;
 }
 
-function applyExtractionOptions(extracted: ExtractedInfo, options: ExtractionOptions = {}): ExtractedInfo {
-  return {
-    ...extracted,
-    name: options.allowName === false ? null : extracted.name,
-    age: options.allowAge === false ? null : extracted.age,
-    gender: options.allowGender === false ? null : extracted.gender,
-    city: options.allowLocation === false ? null : extracted.city,
-    state: options.allowLocation === false ? null : extracted.state,
-    lat: options.allowLocation === false ? null : extracted.lat,
-    lng: options.allowLocation === false ? null : extracted.lng,
-    ambiguous: options.allowLocation === false ? false : extracted.ambiguous,
-    possible_states: options.allowLocation === false ? undefined : extracted.possible_states,
-  };
-}
-
-function hasExplicitNameCue(message: string): boolean {
-  return /\b(nama(?:\s+saya)?|my name is|name\s*:|i am)\b/i.test(message);
-}
-
-function hasExplicitAgeCue(message: string): boolean {
-  return /\b(umur|age|tahun|years?|yrs?|yo)\b/i.test(message);
-}
-
-function hasExplicitGenderCue(message: string): boolean {
-  return /\b(lelaki|laki-laki|perempuan|female|male|woman|man|boy|girl|男|女)\b/i.test(message);
-}
-
-function isLikelyLocationPhrase(value: string): boolean {
-  const lower = value.toLowerCase().trim();
-  const locationWords = [
-    "duduk",
-    "duk",
-    "tinggal",
-    "live",
-    "area",
-    "kawasan",
-    "bandar",
-    "taman",
-    "kampung",
-    "jalan",
-    "lorong",
-    "nilai",
-    "seremban",
-    "selangor",
-    "johor",
-    "kuala lumpur",
-    "kl",
-    "pj",
-    "shah alam",
-    "negeri sembilan",
-  ];
-  return locationWords.some((word) => lower.includes(word));
-}
-
-function shouldAcceptInferredName(candidate: string): boolean {
-  const normalized = candidate.trim();
-  if (!normalized || normalized.length < 2 || normalized.length > 40) return false;
-  if (!/^[a-zA-Z\s]+$/.test(normalized)) return false;
-  if (normalized.split(/\s+/).length > 3) return false;
-  if (isLikelyLocationPhrase(normalized)) return false;
-  return true;
-}
-
-function looksLikeStandaloneNameReply(message: string): boolean {
-  const normalized = normalizeStructuredMessage(message);
-  const firstPart = normalized.split(/[,\n]+/)[0]?.trim() || "";
-  const firstWord = firstPart.split(/\s+/)[0]?.toLowerCase() || "";
-  const notNameWords = new Set([
-    "hello",
-    "hi",
-    "hai",
-    "hey",
-    "helo",
-    "halo",
-    "yo",
-    "oi",
-    "woi",
-    "wei",
-    "umur",
-    "age",
-    "tahun",
-    "lelaki",
-    "laki",
-    "perempuan",
-    "male",
-    "female",
-    "test",
-    "testing",
-    "ok",
-    "okay",
-    "yes",
-    "no",
-    "ya",
-    "tidak",
-    "nak",
-    "mau",
-    "want",
-    "kerja",
-    "job",
-    "cari",
-    "find",
-    "help",
-    "tolong",
-    "bantuan",
-    "lagi",
-    "more",
-    "duk",
-    "duduk",
-    "tinggal",
-    "live",
-  ]);
-
-  return shouldAcceptInferredName(firstPart) && !notNameWords.has(firstWord);
-}
-
-function buildCollectInfoExtractionOptions(
-  user: User,
-  convState: Record<string, any>,
-  message: string,
-): ExtractionOptions {
-  if (convState.location_clarification_pending || convState.ambiguous_location_pending) {
-    return { allowName: false, allowAge: false, allowGender: false, allowLocation: true };
-  }
-
-  const info: ExtractedInfo = {
-    name: user.full_name || null,
-    age: user.age || null,
-    gender: user.gender || null,
-    city: user.location_city || null,
-    state: user.location_state || null,
-    lat: user.latitude || null,
-    lng: user.longitude || null,
-  };
-  const missing = getMissingFields(info);
-
-  return {
-    allowName: missing.includes("name") || hasExplicitNameCue(message) || looksLikeStandaloneNameReply(message),
-    allowAge: missing.includes("age") || hasExplicitAgeCue(message),
-    allowGender: missing.includes("gender") || hasExplicitGenderCue(message),
-    allowLocation: missing.includes("location"),
-  };
-}
-
 // ============================================
 // REVERSE GEOCODE HELPER (using malaysia_locations table)
 // ============================================
@@ -1885,45 +1727,6 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
       const convState = user.conversation_state || {};
       const isLocationClarification = convState.location_clarification_pending || convState.ambiguous_location_pending;
       const recentMsgs: RecentMessage[] = convState.recent_messages || [];
-      const extractionOptions = buildCollectInfoExtractionOptions(updatedUser, convState, message);
-      const currentInfoBeforeExtract: ExtractedInfo = {
-        name: updatedUser.full_name || null,
-        age: updatedUser.age || null,
-        gender: updatedUser.gender || null,
-        city: updatedUser.location_city || null,
-        state: updatedUser.location_state || null,
-        lat: updatedUser.latitude || null,
-        lng: updatedUser.longitude || null,
-      };
-      const missingBeforeExtract = getMissingFields(currentInfoBeforeExtract);
-
-      if (convState.shortcode_jobs?.length && isMoreCommand(message)) {
-        const shortcodeJobs: MatchedJob[] = convState.shortcode_jobs;
-        const nextIndex = (convState.current_job_index || 0) + 3;
-
-        if (nextIndex >= shortcodeJobs.length) {
-          response = getText(lang, {
-            ms: `Dah habis senarai kerja untuk kawasan ni.\n\nKalau nak mohon, terus bagi maklumat adik:\n- Nama penuh\n- Umur\n- Lelaki/Perempuan\n- Duduk mana`,
-            en: `That's all the jobs for this area.\n\nIf you'd like to apply, please send:\n- Full name\n- Age\n- Male/Female\n- Where you live`,
-            zh: `这个地区的工作列表已经看完了。\n\n如果您想申请，请发送：\n- 全名\n- 年龄\n- 男/女\n- 居住地点`,
-          });
-          break;
-        }
-
-        const newState = { ...convState, current_job_index: nextIndex };
-        await supabase
-          .from("applicants")
-          .update({
-            conversation_state: newState,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", user.id);
-
-        return {
-          response: formatJobsMessage(shortcodeJobs, nextIndex, lang),
-          updatedUser: { ...user, conversation_state: newState },
-        };
-      }
 
       // === INTENT CLASSIFICATION (skip if in clarification mode) ===
       if (!isLocationClarification && !convState.ambiguous_location_pending) {
@@ -1975,28 +1778,16 @@ Example: "Ahmad, 25, male, Shah Alam Selangor"`,
         }
       }
 
-      const extracted = await extractAllInfo(message, lang, extractionOptions);
+      const extracted = await extractAllInfo(message, lang);
       console.log("📝 collect_info: Extracted:", JSON.stringify(extracted));
 
       // MERGE: new extracted data with existing user data
       // BUT: If we're in location clarification mode, DON'T overwrite name/age/gender!
       if (!isLocationClarification) {
         // Normal flow: merge all fields
-        if (
-          extracted.name &&
-          (!updatedUser.full_name || hasExplicitNameCue(message) || missingBeforeExtract.includes("name"))
-        ) {
-          updatedUser.full_name = extracted.name.toUpperCase();
-        }
-        if (extracted.age && (!updatedUser.age || hasExplicitAgeCue(message) || missingBeforeExtract.includes("age"))) {
-          updatedUser.age = extracted.age;
-        }
-        if (
-          extracted.gender &&
-          (!updatedUser.gender || hasExplicitGenderCue(message) || missingBeforeExtract.includes("gender"))
-        ) {
-          updatedUser.gender = extracted.gender;
-        }
+        if (extracted.name) updatedUser.full_name = extracted.name.toUpperCase();
+        if (extracted.age) updatedUser.age = extracted.age;
+        if (extracted.gender) updatedUser.gender = extracted.gender;
       } else {
         // Location clarification: preserve existing user info
         console.log("📝 collect_info: In location clarification mode - preserving user info");
@@ -2612,10 +2403,9 @@ async function lookupMalaysiaLocation(
   }
 }
 
-async function extractAllInfo(message: string, lang: string, options: ExtractionOptions = {}): Promise<ExtractedInfo> {
-  const normalizedMessage = normalizeStructuredMessage(message);
+async function extractAllInfo(message: string, lang: string): Promise<ExtractedInfo> {
   // First try rule-based extraction for quick wins
-  const ruleBased = extractInfoRuleBased(normalizedMessage, options);
+  const ruleBased = extractInfoRuleBased(message);
 
   // Use GPT for smarter extraction + geocoding
   let gptResult: ExtractedInfo = { name: null, age: null, gender: null, city: null, state: null, lat: null, lng: null };
@@ -2785,7 +2575,7 @@ Examples:
 "Mei, perempuan, 25, Taman Botani" → {"name":"Mei","age":25,"gender":"female","city":"Taman Botani","state":null,"lat":null,"lng":null,"ambiguous":true,"possible_states":["Selangor","Johor","Penang","Negeri Sembilan"]}
 "Mei, perempuan, 25, Taman Botani Selangor" → {"name":"Mei","age":25,"gender":"female","city":"Taman Botani","state":"Selangor","lat":3.0833,"lng":101.5333,"ambiguous":false}`,
           },
-          { role: "user", content: normalizedMessage },
+          { role: "user", content: message },
         ],
         max_tokens: 200,
         temperature: 0,
@@ -2810,7 +2600,6 @@ Examples:
         ambiguous: parsed.ambiguous || false,
         possible_states: parsed.possible_states || undefined,
       };
-      gptResult = applyExtractionOptions(gptResult, options);
       console.log(
         `📍 GPT extracted: ${gptResult.city}, ${gptResult.state} (${gptResult.lat}, ${gptResult.lng}) ambiguous=${gptResult.ambiguous}`,
       );
@@ -2851,13 +2640,13 @@ Examples:
     }
   }
 
-  return applyExtractionOptions(merged, options);
+  return merged;
 }
 
 // ============================================
 // RULE-BASED INFO EXTRACTION (Fallback)
 // ============================================
-function extractInfoRuleBased(message: string, options: ExtractionOptions = {}): ExtractedInfo {
+function extractInfoRuleBased(message: string): ExtractedInfo {
   const result: ExtractedInfo = {
     name: null,
     age: null,
@@ -2868,12 +2657,48 @@ function extractInfoRuleBased(message: string, options: ExtractionOptions = {}):
     lng: null,
   };
 
-  const normalizedMessage = normalizeStructuredMessage(message);
-  const lower = normalizedMessage.toLowerCase();
+  const lower = message.toLowerCase();
 
   // Extract age - including Malay number words
-  if (options.allowAge !== false) {
-    const malayNumbers: Record<string, number> = {
+  const malayNumbers: Record<string, number> = {
+    satu: 1,
+    dua: 2,
+    tiga: 3,
+    empat: 4,
+    lima: 5,
+    enam: 6,
+    tujuh: 7,
+    lapan: 8,
+    sembilan: 9,
+    sepuluh: 10,
+    sebelas: 11,
+    "dua belas": 12,
+    "tiga belas": 13,
+    "empat belas": 14,
+    "lima belas": 15,
+    "enam belas": 16,
+    "tujuh belas": 17,
+    "lapan belas": 18,
+    "sembilan belas": 19,
+    "dua puluh": 20,
+    "dua puloh": 20,
+    "tiga puluh": 30,
+    "tiga puloh": 30,
+    "empat puluh": 40,
+    "empat puloh": 40,
+    "lima puluh": 50,
+    "lima puloh": 50,
+    "enam puluh": 60,
+    "enam puloh": 60,
+  };
+
+  // Check for compound numbers like "dua puluh lima" (25)
+  const compoundMatch = lower.match(
+    /(dua|tiga|empat|lima|enam)\s*pul[uo]h\s*(satu|dua|tiga|empat|lima|enam|tujuh|lapan|sembilan)?/i,
+  );
+  if (compoundMatch) {
+    const tensMap: Record<string, number> = { dua: 20, tiga: 30, empat: 40, lima: 50, enam: 60 };
+    const unitsMap: Record<string, number> = {
       satu: 1,
       dua: 2,
       tiga: 3,
@@ -2883,252 +2708,210 @@ function extractInfoRuleBased(message: string, options: ExtractionOptions = {}):
       tujuh: 7,
       lapan: 8,
       sembilan: 9,
-      sepuluh: 10,
-      sebelas: 11,
-      "dua belas": 12,
-      "tiga belas": 13,
-      "empat belas": 14,
-      "lima belas": 15,
-      "enam belas": 16,
-      "tujuh belas": 17,
-      "lapan belas": 18,
-      "sembilan belas": 19,
-      "dua puluh": 20,
-      "dua puloh": 20,
-      "tiga puluh": 30,
-      "tiga puloh": 30,
-      "empat puluh": 40,
-      "empat puloh": 40,
-      "lima puluh": 50,
-      "lima puloh": 50,
-      "enam puluh": 60,
-      "enam puloh": 60,
     };
+    const tens = tensMap[compoundMatch[1].toLowerCase()] || 0;
+    const units = compoundMatch[2] ? unitsMap[compoundMatch[2].toLowerCase()] || 0 : 0;
+    const age = tens + units;
+    if (age >= 15 && age <= 80) {
+      result.age = age;
+    }
+  }
 
-    const compoundMatch = lower.match(
-      /(dua|tiga|empat|lima|enam)\s*pul[uo]h\s*(satu|dua|tiga|empat|lima|enam|tujuh|lapan|sembilan)?/i,
-    );
-    if (compoundMatch) {
-      const tensMap: Record<string, number> = { dua: 20, tiga: 30, empat: 40, lima: 50, enam: 60 };
-      const unitsMap: Record<string, number> = {
-        satu: 1,
-        dua: 2,
-        tiga: 3,
-        empat: 4,
-        lima: 5,
-        enam: 6,
-        tujuh: 7,
-        lapan: 8,
-        sembilan: 9,
-      };
-      const tens = tensMap[compoundMatch[1].toLowerCase()] || 0;
-      const units = compoundMatch[2] ? unitsMap[compoundMatch[2].toLowerCase()] || 0 : 0;
-      const age = tens + units;
-      if (age >= 15 && age <= 80) {
-        result.age = age;
+  // Check for simple Malay numbers
+  if (!result.age) {
+    for (const [word, num] of Object.entries(malayNumbers)) {
+      if (lower.includes(word) && num >= 15 && num <= 80) {
+        result.age = num;
+        break;
       }
     }
+  }
 
-    if (!result.age) {
-      for (const [word, num] of Object.entries(malayNumbers)) {
-        if (lower.includes(word) && num >= 15 && num <= 80) {
-          result.age = num;
+  // Standard age patterns
+  if (!result.age) {
+    const agePatterns = [
+      /(\d{1,2})\s*(tahun|thn|th|years?|yrs?|yo|岁)/i,
+      /umur\s*[:=]?\s*(\d{1,2})/i,
+      /age\s*[:=]?\s*(\d{1,2})/i,
+    ];
+    for (const pattern of agePatterns) {
+      const match = message.match(pattern);
+      if (match) {
+        const age = parseInt(match[1]);
+        if (age >= 15 && age <= 80) {
+          result.age = age;
           break;
         }
       }
     }
+  }
 
-    if (!result.age) {
-      const agePatterns = [
-        /(\d{1,2})\s*(tahun|thn|th|years?|yrs?|yo|岁)/i,
-        /umur\s*[:=]?\s*(\d{1,2})/i,
-        /age\s*[:=]?\s*(\d{1,2})/i,
-      ];
-      for (const pattern of agePatterns) {
-        const match = normalizedMessage.match(pattern);
-        if (match) {
-          const age = parseInt(match[1]);
-          if (age >= 15 && age <= 80) {
-            result.age = age;
-            break;
-          }
-        }
-      }
-    }
-
-    if (!result.age) {
-      const nums = normalizedMessage.match(/\b(\d{2})\b/g);
-      if (nums) {
-        for (const num of nums) {
-          const age = parseInt(num);
-          if (age >= 18 && age <= 65) {
-            result.age = age;
-            break;
-          }
+  // Standalone 2-digit numbers
+  if (!result.age) {
+    const nums = message.match(/\b(\d{2})\b/g);
+    if (nums) {
+      for (const num of nums) {
+        const age = parseInt(num);
+        if (age >= 18 && age <= 65) {
+          result.age = age;
+          break;
         }
       }
     }
   }
 
   // Extract gender
-  if (options.allowGender !== false) {
-    const maleWords = ["lelaki", "laki-laki", "jantan", "male", "man", "boy", "男"];
-    const femaleWords = ["perempuan", "pompuan", "wanita", "female", "woman", "girl", "女"];
+  const maleWords = ["lelaki", "laki", "laki-laki", "jantan", "male", "man", "boy", "男"];
+  const femaleWords = ["perempuan", "pompuan", "wanita", "female", "woman", "girl", "女"];
 
+  for (const word of maleWords) {
+    if (lower.includes(word)) {
+      result.gender = "male";
+      break;
+    }
+  }
+  if (!result.gender) {
     for (const word of femaleWords) {
-      const regex = /[a-z]/i.test(word) ? new RegExp(`\\b${word}\\b`, "i") : new RegExp(word, "i");
-      if (regex.test(normalizedMessage)) {
+      if (lower.includes(word)) {
         result.gender = "female";
         break;
-      }
-    }
-    if (!result.gender) {
-      for (const word of maleWords) {
-        const regex = /[a-z]/i.test(word) ? new RegExp(`\\b${word}\\b`, "i") : new RegExp(word, "i");
-        if (regex.test(normalizedMessage)) {
-          result.gender = "male";
-          break;
-        }
       }
     }
   }
 
   // Extract location
-  if (options.allowLocation !== false) {
-    const locationAliases: Array<[string, { city: string; state: string }]> = [
-      ["kuala lumpur", { city: "Kuala Lumpur", state: "Kuala Lumpur" }],
-      ["negeri sembilan", { city: "Seremban", state: "Negeri Sembilan" }],
-      ["shah alam", { city: "Shah Alam", state: "Selangor" }],
-      ["petaling jaya", { city: "Petaling Jaya", state: "Selangor" }],
-      ["johor bahru", { city: "Johor Bahru", state: "Johor" }],
-      ["kota kinabalu", { city: "Kota Kinabalu", state: "Sabah" }],
-      ["kota bharu", { city: "Kota Bharu", state: "Kelantan" }],
-      ["george town", { city: "George Town", state: "Penang" }],
-      ["subang jaya", { city: "Subang Jaya", state: "Selangor" }],
-      ["alor setar", { city: "Alor Setar", state: "Kedah" }],
-      ["terengganu", { city: "Kuala Terengganu", state: "Terengganu" }],
-      ["cyberjaya", { city: "Cyberjaya", state: "Selangor" }],
-      ["putrajaya", { city: "Putrajaya", state: "Putrajaya" }],
-      ["selangor", { city: "Shah Alam", state: "Selangor" }],
-      ["kelantan", { city: "Kota Bharu", state: "Kelantan" }],
-      ["sarawak", { city: "Kuching", state: "Sarawak" }],
-      ["malacca", { city: "Melaka", state: "Melaka" }],
-      ["penang", { city: "George Town", state: "Penang" }],
-      ["melaka", { city: "Melaka", state: "Melaka" }],
-      ["subang", { city: "Subang Jaya", state: "Selangor" }],
-      ["pahang", { city: "Kuantan", state: "Pahang" }],
-      ["perlis", { city: "Kangar", state: "Perlis" }],
-      ["klang", { city: "Klang", state: "Selangor" }],
-      ["kedah", { city: "Alor Setar", state: "Kedah" }],
-      ["perak", { city: "Ipoh", state: "Perak" }],
-      ["johor", { city: "Johor Bahru", state: "Johor" }],
-      ["sabah", { city: "Kota Kinabalu", state: "Sabah" }],
-      ["ipoh", { city: "Ipoh", state: "Perak" }],
-      ["meru", { city: "Klang", state: "Selangor" }],
-      ["pj", { city: "Petaling Jaya", state: "Selangor" }],
-      ["jb", { city: "Johor Bahru", state: "Johor" }],
-      ["kl", { city: "Kuala Lumpur", state: "Kuala Lumpur" }],
-      ["ns", { city: "Seremban", state: "Negeri Sembilan" }],
-      ["nilai", { city: "Nilai", state: "Negeri Sembilan" }],
-    ];
+  const locationAliases: Array<[string, { city: string; state: string }]> = [
+    ["kuala lumpur", { city: "Kuala Lumpur", state: "Kuala Lumpur" }],
+    ["negeri sembilan", { city: "Seremban", state: "Negeri Sembilan" }],
+    ["shah alam", { city: "Shah Alam", state: "Selangor" }],
+    ["petaling jaya", { city: "Petaling Jaya", state: "Selangor" }],
+    ["johor bahru", { city: "Johor Bahru", state: "Johor" }],
+    ["kota kinabalu", { city: "Kota Kinabalu", state: "Sabah" }],
+    ["kota bharu", { city: "Kota Bharu", state: "Kelantan" }],
+    ["george town", { city: "George Town", state: "Penang" }],
+    ["subang jaya", { city: "Subang Jaya", state: "Selangor" }],
+    ["alor setar", { city: "Alor Setar", state: "Kedah" }],
+    ["terengganu", { city: "Kuala Terengganu", state: "Terengganu" }],
+    ["cyberjaya", { city: "Cyberjaya", state: "Selangor" }],
+    ["putrajaya", { city: "Putrajaya", state: "Putrajaya" }],
+    ["selangor", { city: "Shah Alam", state: "Selangor" }],
+    ["kelantan", { city: "Kota Bharu", state: "Kelantan" }],
+    ["sarawak", { city: "Kuching", state: "Sarawak" }],
+    ["malacca", { city: "Melaka", state: "Melaka" }],
+    ["penang", { city: "George Town", state: "Penang" }],
+    ["melaka", { city: "Melaka", state: "Melaka" }],
+    ["subang", { city: "Subang Jaya", state: "Selangor" }],
+    ["pahang", { city: "Kuantan", state: "Pahang" }],
+    ["perlis", { city: "Kangar", state: "Perlis" }],
+    ["klang", { city: "Klang", state: "Selangor" }],
+    ["kedah", { city: "Alor Setar", state: "Kedah" }],
+    ["perak", { city: "Ipoh", state: "Perak" }],
+    ["johor", { city: "Johor Bahru", state: "Johor" }],
+    ["sabah", { city: "Kota Kinabalu", state: "Sabah" }],
+    ["ipoh", { city: "Ipoh", state: "Perak" }],
+    ["meru", { city: "Klang", state: "Selangor" }],
+    ["pj", { city: "Petaling Jaya", state: "Selangor" }],
+    ["jb", { city: "Johor Bahru", state: "Johor" }],
+    ["kl", { city: "Kuala Lumpur", state: "Kuala Lumpur" }],
+    ["ns", { city: "Seremban", state: "Negeri Sembilan" }],
+  ];
 
-    for (const [alias, loc] of locationAliases) {
-      if (alias.length <= 2) {
-        const wordBoundaryRegex = new RegExp(`\\b${alias}\\b`, "i");
-        if (wordBoundaryRegex.test(lower)) {
-          result.city = loc.city;
-          result.state = loc.state;
-          break;
-        }
-      } else if (lower.includes(alias)) {
+  for (const [alias, loc] of locationAliases) {
+    if (alias.length <= 2) {
+      const wordBoundaryRegex = new RegExp(`\\b${alias}\\b`, "i");
+      if (wordBoundaryRegex.test(lower)) {
         result.city = loc.city;
         result.state = loc.state;
         break;
       }
+    } else if (lower.includes(alias)) {
+      result.city = loc.city;
+      result.state = loc.state;
+      break;
     }
   }
 
   // Extract name
-  if (options.allowName !== false) {
-    const namePatterns = [
-      /nama\s*(?:saya\s*)?(?:ialah\s*)?[:=]?\s*([A-Za-z][A-Za-z\s]{1,30})/i,
-      /(?:i am|my name is|name:?)\s*([A-Za-z][A-Za-z\s]{1,30})/i,
-    ];
-    for (const pattern of namePatterns) {
-      const match = normalizedMessage.match(pattern);
-      if (match && shouldAcceptInferredName(match[1])) {
-        result.name = match[1].trim();
-        break;
-      }
+  const namePatterns = [
+    /nama\s*(?:saya\s*)?(?:ialah\s*)?[:=]?\s*([A-Za-z][A-Za-z\s]{1,30})/i,
+    /(?:i am|my name is|name:?)\s*([A-Za-z][A-Za-z\s]{1,30})/i,
+  ];
+  for (const pattern of namePatterns) {
+    const match = message.match(pattern);
+    if (match) {
+      result.name = match[1].trim();
+      break;
     }
+  }
 
-    if (!result.name) {
-      const parts = normalizedMessage.split(/[,\n]+/);
-      if (parts[0]) {
-        const firstPart = parts[0].trim();
-        const notNameWords = [
-          "hello",
-          "hi",
-          "hai",
-          "hey",
-          "helo",
-          "halo",
-          "yo",
-          "oi",
-          "woi",
-          "wei",
-          "umur",
-          "age",
-          "tahun",
-          "lelaki",
-          "laki",
-          "perempuan",
-          "male",
-          "female",
-          "男",
-          "女",
-          "satu",
-          "dua",
-          "tiga",
-          "empat",
-          "lima",
-          "enam",
-          "tujuh",
-          "lapan",
-          "sembilan",
-          "sepuluh",
-          "puluh",
-          "puloh",
-          "test",
-          "testing",
-          "ok",
-          "okay",
-          "yes",
-          "no",
-          "ya",
-          "tidak",
-          "nak",
-          "mau",
-          "want",
-          "kerja",
-          "job",
-          "cari",
-          "find",
-          "help",
-          "tolong",
-          "bantuan",
-          "lagi",
-          "more",
-          "duk",
-          "duduk",
-          "tinggal",
-          "live",
-        ];
-        const firstWord = firstPart.split(/\s+/)[0].toLowerCase();
+  if (!result.name) {
+    const parts = message.split(/[,]+/);
+    if (parts[0]) {
+      const firstPart = parts[0].trim();
+      const notNameWords = [
+        // Greetings - should not be treated as names
+        "hello",
+        "hi",
+        "hai",
+        "hey",
+        "helo",
+        "halo",
+        "yo",
+        "oi",
+        "woi",
+        "wei",
+        // Common words
+        "umur",
+        "age",
+        "tahun",
+        "lelaki",
+        "laki",
+        "perempuan",
+        "male",
+        "female",
+        "男",
+        "女",
+        "satu",
+        "dua",
+        "tiga",
+        "empat",
+        "lima",
+        "enam",
+        "tujuh",
+        "lapan",
+        "sembilan",
+        "sepuluh",
+        "puluh",
+        "puloh",
+        // Random words that aren't names
+        "test",
+        "testing",
+        "ok",
+        "okay",
+        "yes",
+        "no",
+        "ya",
+        "tidak",
+        "nak",
+        "mau",
+        "want",
+        "kerja",
+        "job",
+        "cari",
+        "find",
+        "help",
+        "tolong",
+        "bantuan",
+      ];
+      const firstWord = firstPart.split(/\s+/)[0].toLowerCase();
 
-        if (shouldAcceptInferredName(firstPart) && !notNameWords.includes(firstWord) && !/^\d+$/.test(firstPart)) {
-          result.name = firstPart;
-        }
+      if (
+        firstPart.length >= 2 &&
+        /^[a-zA-Z\s]+$/.test(firstPart) &&
+        !notNameWords.includes(firstWord) &&
+        !/^\d+$/.test(firstPart)
+      ) {
+        result.name = firstPart;
       }
     }
   }
@@ -3215,11 +2998,6 @@ async function handleCompletedUserConversational(
   const firstName = user.full_name?.split(" ")[0] || "";
   const convState = user.conversation_state || {};
   const recentMsgs: RecentMessage[] = convState.recent_messages || [];
-
-  const contextualSearch = await handleContextualJobSearch(user, message, lang, "completed");
-  if (contextualSearch) {
-    return contextualSearch;
-  }
 
   // Check explicit keyword-based job search intent first
   const wantsSearch = await detectJobSearchIntent(message, lang);
@@ -3329,11 +3107,6 @@ async function handleMatchingConversational(
   const currentIndex = convState.current_job_index || 0;
 
   console.log(`🎯 Jobs in state: ${matchedJobs.length}, currentIndex: ${currentIndex}`);
-
-  const contextualSearch = await handleContextualJobSearch(user, message, lang, "matching");
-  if (contextualSearch) {
-    return contextualSearch;
-  }
 
   // ===== EXPAND SEARCH HANDLER =====
   if (convState.expand_search_pending) {
@@ -3698,88 +3471,6 @@ function isMoreCommand(message: string): boolean {
   const lower = message.toLowerCase().trim();
   const moreWords = ["more", "lagi", "更多", "next", "seterusnya", "lain"];
   return moreWords.includes(lower) || moreWords.some((w) => lower.startsWith(w));
-}
-
-function looksLikeLocationSearchMessage(message: string): boolean {
-  const lower = normalizeStructuredMessage(message).toLowerCase();
-  const searchPhrases = [
-    "cari kerja",
-    "nak cari kerja",
-    "search job",
-    "find job",
-    "jobs near",
-    "job near",
-    "kerja dekat",
-    "kerja kat",
-    "kerja area",
-    "kerja sekitar",
-    "nak kerja kat",
-    "want job in",
-    "find jobs in",
-    "找工作",
-  ];
-  const locationHints = ["kat ", "dekat ", "near ", "in ", "area ", "sekitar ", "lokasi ", "location "];
-  return searchPhrases.some((phrase) => lower.includes(phrase)) || locationHints.some((hint) => lower.includes(hint));
-}
-
-async function handleContextualJobSearch(
-  user: User,
-  message: string,
-  lang: string,
-  sourceState: "matching" | "completed",
-): Promise<{ response: string; updatedUser: User } | null> {
-  const lower = normalizeStructuredMessage(message).toLowerCase();
-  if (!looksLikeLocationSearchMessage(message) && !(await detectJobSearchIntent(message, lang))) {
-    return null;
-  }
-
-  const extracted = await extractAllInfo(message, lang, {
-    allowName: false,
-    allowAge: false,
-    allowGender: false,
-    allowLocation: true,
-  });
-
-  if (!extracted.city && !extracted.state) {
-    return null;
-  }
-
-  const searchUser: User = {
-    ...user,
-    location_city: extracted.city || user.location_city,
-    location_state: extracted.state || user.location_state,
-    latitude: extracted.lat || user.latitude,
-    longitude: extracted.lng || user.longitude,
-  };
-
-  const result = await findAndPresentJobsConversational(searchUser);
-  const updatedUser: User = {
-    ...searchUser,
-    onboarding_status: "matching",
-    onboarding_step: "viewing_jobs",
-    conversation_state: buildPostSearchState(result),
-  };
-
-  await updateUserInDB(user.id, updatedUser, "viewing_jobs");
-
-  const locationText = [updatedUser.location_city, updatedUser.location_state].filter(Boolean).join(", ");
-  const jobCount = result.jobs.length;
-  const intro =
-    sourceState === "matching"
-      ? getText(lang, {
-          ms: `Ok, Kak Ani carikan kerja dekat ${locationText} pula.`,
-          en: `Ok, I'll search near ${locationText} instead.`,
-          zh: `好的，我改为查找${locationText}附近的工作。`,
-        })
-      : getText(lang, {
-          ms: `Ok, Kak Ani carikan kerja dekat ${locationText}.`,
-          en: `Ok, I'll search near ${locationText}.`,
-          zh: `好的，我来查找${locationText}附近的工作。`,
-        });
-
-  const response = jobCount > 0 ? `${intro}\n\n${result.message}` : `${intro}\n\n${result.message}`;
-
-  return { response, updatedUser };
 }
 
 // ============================================
