@@ -191,6 +191,14 @@ export function mergeSlotValue(
     return
   }
 
+  // NAME PROTECTION: If name slot is confirmed (seen 2+ times or locked) and the candidate
+  // looks like a location, reject it unless user explicitly says "nama saya ..."
+  if (slot === 'name' && entry.locked && !hasStrongCorrectionSignal('name', message)) {
+    // Don't overwrite a locked name
+    console.log(`🛡️ Slot: Blocked overwrite of locked name "${entry.value}" with "${candidate}"`)
+    return
+  }
+
   // Existing value present: only replace if unlocked or user gives strong correction/structured profile.
   const structuredSignal = /[,./|:\n-]/.test(message) && message.trim().split(/\s+/).length >= 4
   if (!entry.locked || hasStrongCorrectionSignal(slot, message) || structuredSignal) {

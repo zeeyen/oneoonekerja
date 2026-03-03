@@ -10,8 +10,12 @@ export type MessageType =
   | 'question'
   | 'confusion'
   | 'job_preference'
+  | 'job_search'           // explicit "cari kerja" / "find job"
+  | 'job_search_location'  // implicit "ada kerja kat Muar?"
+  | 'question_about_job'   // question about a specific selected/shown job
   | 'greeting'
   | 'command'
+  | 'language_switch'      // "BM pls", "cakap BM"
   | 'out_of_context'
   | 'other'
 
@@ -22,6 +26,8 @@ export interface NLUResult {
   extractableFields: string[]         // which profile fields appear present in this message
   contextualResponse: string | null   // GPT response for questions/confusion (saves a generateKakAniResponse call)
   shouldExtract: boolean              // whether to run extraction pipeline
+  detectedLocation: string | null     // location mentioned in job_search_location messages
+  switchToLanguage: string | null     // target language for language_switch messages
 }
 
 export interface NLUContext {
@@ -33,6 +39,9 @@ export interface NLUContext {
   hasLocation: boolean
   userName?: string
   lang: string
+  // Richer context for completed/matching states
+  lastSelectedJob?: Record<string, any> | null
+  currentJobsList?: Array<Record<string, any>> | null
 }
 
 const SAFE_DEFAULT: NLUResult = {
@@ -41,7 +50,9 @@ const SAFE_DEFAULT: NLUResult = {
   detectedLanguage: null,
   extractableFields: [],
   contextualResponse: null,
-  shouldExtract: true
+  shouldExtract: true,
+  detectedLocation: null,
+  switchToLanguage: null
 }
 
 /**
@@ -55,6 +66,21 @@ export async function understandMessage(
 ): Promise<NLUResult> {
   try {
     const { currentStep, missingFields, hasName, hasAge, hasGender, hasLocation, userName, lang } = context
+
+    // Fast-path: explicit language switch commands (no GPT needed)
+    const langSwitch = detectLanguageSwitchCommand(message)
+    if (langSwitch) {
+      return {
+        messageType: 'language_switch',
+        confidence: 0.95,
+        detectedLanguage: langSwitch as 'ms' | 'en' | 'zh',
+        extractableFields: [],
+        contextualResponse: null,
+        shouldExtract: false,
+        detectedLocation: null,
+        switchToLanguage: langSwitch
+      }
+    }
 
     // Build conversation history snippet (last 2-3 turns)
     let historySnippet = ''
@@ -73,6 +99,39 @@ export async function understandMessage(
     if (hasLocation) collected.push('location=yes')
     const missingStr = missingFields.length > 0 ? missingFields.join(', ') : 'NONE (all collected)'
 
+    // Build state-specific context
+    let stateContext = ''
+    if (currentStep === 'completed' || currentStep === 'matching') {
+      if (context.lastSelectedJob) {
+        const j = context.lastSelectedJob
+        stateContext += `\n- Last selected job: "${j.title}" at "${j.company}", salary: ${j.salary_range || 'N/A'}, type: ${j.job_type || 'N/A'}, location: ${j.location_city || ''} ${j.location_state || ''}`
+      }
+      if (context.currentJobsList && context.currentJobsList.length > 0) {
+        const jobSummary = context.currentJobsList.slice(0, 5).map((j, i) =>
+          `  ${i + 1}. "${j.title}" at "${j.company}" (${j.location_city || ''}, type: ${j.job_type || 'N/A'})`
+        ).join('\n')
+        stateContext += `\n- Currently shown jobs:\n${jobSummary}`
+      }
+    }
+
+    // Build state-specific classification rules
+    let extraRules = ''
+    if (currentStep === 'completed') {
+      extraRules = `
+8. "job_search" — User explicitly wants to search for jobs: "cari kerja", "nak kerja", "find job". shouldExtract=false.
+9. "job_search_location" — User is asking about jobs at a SPECIFIC location: "ada kerja kat Muar?", "kerja dekat KL ada?", "Shah Alam ada?", "nak kerja kat Seremban". Set detectedLocation to the location name. shouldExtract=false.
+   IMPORTANT: Messages mentioning a location + any reference to jobs/work/availability → job_search_location, NOT question.
+   Examples: "Petaling Jaya ada?" → job_search_location (detectedLocation: "Petaling Jaya")
+             "ada kerja kat Johor?" → job_search_location (detectedLocation: "Johor")
+             "sy nak krj nilai negeri sembilan" → job_search_location (detectedLocation: "Nilai, Negeri Sembilan")
+10. "question_about_job" — User asking about a SPECIFIC job they selected or are viewing: "part time ke full time?", "ada hostel?", "gaji berapa?", "kilang apa ni?". shouldExtract=false. Provide contextualResponse using the job info available.
+11. "language_switch" — User wants to change language: "BM pls", "cakap BM", "in English please". Set switchToLanguage.`
+    } else if (currentStep === 'matching') {
+      extraRules = `
+8. "job_search_location" — User asking about jobs at a different location while viewing results. Set detectedLocation. shouldExtract=false.
+9. "question_about_job" — User asking about one of the currently shown jobs. shouldExtract=false. Answer using the job info provided.`
+    }
+
     const systemPrompt = `You are the NLU component of a Malaysian job-search WhatsApp bot ("Kak Ani").
 Analyze the user's message and return ONLY a JSON object.
 
@@ -81,16 +140,18 @@ CONTEXT:
 - Collected fields: ${collected.join(', ') || 'none'}
 - Missing fields: ${missingStr}
 - User language preference: ${lang}
-${historySnippet ? `- Recent conversation:\n${historySnippet}` : ''}
+${historySnippet ? `- Recent conversation:\n${historySnippet}` : ''}${stateContext}
 
 RETURN THIS JSON FORMAT:
 {
-  "messageType": "data_response|question|confusion|job_preference|greeting|command|out_of_context|other",
+  "messageType": "data_response|question|confusion|job_preference|job_search|job_search_location|question_about_job|greeting|command|language_switch|out_of_context|other",
   "confidence": 0.0-1.0,
   "detectedLanguage": "ms"|"en"|"zh"|null,
   "extractableFields": ["name","age","gender","location"],
   "contextualResponse": "...",
-  "shouldExtract": true|false
+  "shouldExtract": true|false,
+  "detectedLocation": "location name or null",
+  "switchToLanguage": "ms"|"en"|"zh"|null
 }
 
 CLASSIFICATION RULES:
@@ -114,6 +175,7 @@ CLASSIFICATION RULES:
 6. "command" — "lagi", "more", "restart", "semula", number selection. shouldExtract=false. No contextualResponse needed.
 
 7. "out_of_context" — Completely off-topic. shouldExtract=false. Provide contextualResponse redirecting gently.
+${extraRules}
 
 IMPORTANT FIELD DETECTION RULES:
 - If the message is a SINGLE word or short phrase and matches a missing field type, classify as data_response with that field.
@@ -122,12 +184,18 @@ IMPORTANT FIELD DETECTION RULES:
 - For structured data like "Ali, 25, male, KL" → all 4 fields.
 - DO NOT put fields in extractableFields if the user is asking ABOUT them (e.g., "what location?" is a question, not location data).
 
+LANGUAGE DETECTION RULES:
+- Malay loanwords like "part time", "full time", "job", "ok" used in an otherwise Malay sentence → detectedLanguage: "ms"
+- Only set detectedLanguage to "en" if the ENTIRE message is clearly in English
+- "kerja nie part time atau full time?" → detectedLanguage: "ms" (Malay sentence with English loanwords)
+
 CONTEXTUAL RESPONSE RULES:
 - Use ${lang === 'zh' ? 'Simplified Chinese' : lang === 'en' ? 'English' : 'casual Malay (with light bahasa pasar)'}
 - Be warm, brief (1-3 lines max)
 - ${userName ? `Call user "${userName}"` : 'Call user "adik"'}
 - For questions: answer briefly, then redirect to missing info
 - For confusion: be empathetic, simplify, ask for just ONE field
+- For question_about_job: answer using the job details provided in context. If info is not available, say so honestly and suggest checking the apply link.
 - Set contextualResponse to null for data_response and command types`
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -142,7 +210,7 @@ CONTEXTUAL RESPONSE RULES:
           { role: 'system', content: systemPrompt },
           { role: 'user', content: message }
         ],
-        max_tokens: 250,
+        max_tokens: 300,
         temperature: 0
       })
     })
@@ -159,9 +227,11 @@ CONTEXTUAL RESPONSE RULES:
         detectedLanguage: ['ms', 'en', 'zh'].includes(parsed.detectedLanguage) ? parsed.detectedLanguage : null,
         extractableFields: Array.isArray(parsed.extractableFields) ? parsed.extractableFields : [],
         contextualResponse: parsed.contextualResponse || null,
-        shouldExtract: parsed.shouldExtract !== false  // default true
+        shouldExtract: parsed.shouldExtract !== false,  // default true
+        detectedLocation: parsed.detectedLocation || null,
+        switchToLanguage: parsed.switchToLanguage || null
       }
-      console.log(`🧠 NLU: ${nluResult.messageType} (${nluResult.confidence}), fields=[${nluResult.extractableFields}], extract=${nluResult.shouldExtract}, lang=${nluResult.detectedLanguage} for "${message.substring(0, 40)}..."`)
+      console.log(`🧠 NLU: ${nluResult.messageType} (${nluResult.confidence}), fields=[${nluResult.extractableFields}], extract=${nluResult.shouldExtract}, lang=${nluResult.detectedLanguage}, loc=${nluResult.detectedLocation} for "${message.substring(0, 40)}..."`)
       return nluResult
     }
   } catch (error) {
@@ -171,4 +241,32 @@ CONTEXTUAL RESPONSE RULES:
   // Safe fallback — identical behavior to old classifyIntent default
   console.log(`⚠️ NLU fallback: treating as data_response for "${message.substring(0, 40)}..."`)
   return { ...SAFE_DEFAULT }
+}
+
+/**
+ * Detect explicit language switch commands without GPT.
+ * Returns target language or null.
+ */
+function detectLanguageSwitchCommand(message: string): string | null {
+  const lower = message.toLowerCase().trim()
+  
+  // BM / Malay switch
+  if (/^(bm\s*(pls|please|plz)?|cakap\s*bm|bahasa\s*melayu|malay\s*(pls|please)?|tukar\s*(ke\s*)?bm|in\s*malay)$/i.test(lower)) {
+    return 'ms'
+  }
+  if (/cakap\s*bm\s*(ngan|dengan|dgn)\s*(aku|saya)/i.test(lower)) {
+    return 'ms'
+  }
+  
+  // English switch
+  if (/^(english\s*(pls|please|plz)?|cakap\s*english|tukar\s*(ke\s*)?english|in\s*english|speak\s*english)$/i.test(lower)) {
+    return 'en'
+  }
+  
+  // Chinese switch
+  if (/^(中文|华语|chinese\s*(pls|please)?|cakap\s*chinese|tukar\s*(ke\s*)?chinese)$/i.test(lower)) {
+    return 'zh'
+  }
+  
+  return null
 }

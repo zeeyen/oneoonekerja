@@ -41,21 +41,42 @@ export function isLowSignalMessage(message: string): boolean {
   return lowSignalTokens.has(lower)
 }
 
+// Common English loanwords used in Malay context — these should NOT flip language to English
+const MALAY_LOANWORDS = new Set([
+  'part time', 'full time', 'part-time', 'full-time', 'job', 'ok', 'okay',
+  'factory', 'warehouse', 'hostel', 'shift', 'overtime', 'ot', 'salary',
+  'company', 'apply', 'register', 'link', 'website', 'online', 'code',
+  'referral', 'scam', 'interview', 'resume', 'email', 'phone', 'whatsapp',
+  'area', 'location', 'address', 'transport', 'bus', 'grab', 'mrt', 'lrt'
+])
+
 export function detectMessageLanguage(message: string): string | null {
   if (!message || isLowSignalMessage(message)) return null
   if (/[\u4e00-\u9fff]/.test(message)) return 'zh'
 
   const lower = normalizeLooseText(message)
-  const msWords = ['saya', 'nama', 'umur', 'lelaki', 'perempuan', 'duduk', 'kat', 'dekat', 'nak', 'kerja', 'tak', 'boleh', 'lokasi', 'mana', 'kampung', 'bagitahu']
-  const enWords = ['i ', 'my', 'name', 'age', 'male', 'female', 'where', 'job', 'find', 'location', 'full time', 'part time', 'please', 'can you']
+  
+  // Remove loanwords before scoring to avoid false English detection
+  let cleanedForScoring = lower
+  for (const loanword of MALAY_LOANWORDS) {
+    cleanedForScoring = cleanedForScoring.replace(new RegExp(`\\b${loanword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), '')
+  }
+  cleanedForScoring = cleanedForScoring.trim()
 
-  const scoreWords = (words: string[]) => words.reduce((acc, w) => acc + (lower.includes(w) ? 1 : 0), 0)
-  const msScore = scoreWords(msWords)
-  const enScore = scoreWords(enWords)
+  const msWords = ['saya', 'nama', 'umur', 'lelaki', 'perempuan', 'duduk', 'kat', 'dekat', 'nak', 'kerja', 'tak', 'boleh', 'lokasi', 'mana', 'kampung', 'bagitahu', 'ada', 'nie', 'ni', 'tu', 'ye', 'la', 'lah', 'kan', 'ke', 'atau', 'macam']
+  const enWords = ['i ', 'my ', 'name is', 'age is', 'where', 'find', 'please', 'can you', 'would', 'could', 'should', 'looking for', 'i want', 'i need', 'thank you', 'thanks']
+
+  const scoreWords = (words: string[], text: string) => words.reduce((acc, w) => acc + (text.includes(w) ? 1 : 0), 0)
+  const msScore = scoreWords(msWords, lower) // Score Malay against original (includes particles like ni, tu, lah)
+  const enScore = scoreWords(enWords, cleanedForScoring) // Score English against cleaned text
 
   if (msScore === 0 && enScore === 0) return null
-  if (Math.abs(msScore - enScore) <= 0) return null
-  return msScore > enScore ? 'ms' : 'en'
+  
+  // Require stronger English signal: at least 2 more English words than Malay
+  if (enScore >= msScore + 2) return 'en'
+  if (msScore > 0) return 'ms'
+  
+  return null
 }
 
 export function resolveMirroredLanguage(message: string, currentLang: string = 'ms'): string {
