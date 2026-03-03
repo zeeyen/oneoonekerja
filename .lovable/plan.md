@@ -1,62 +1,132 @@
 
 
-## Fix: "Ya" Not Expanding to 20km + Unrecognized Input Breaking Expand Flow
+# Kak Ani Bot: Conversation Intelligence Overhaul
 
-### What's Happening
+## Analysis of Real Applicant Patterns
 
-The conversation flow breaks at two points:
+From ~500 conversation records across ~30+ real applicants, here are the critical failure patterns:
 
-1. Bot asks "expand to 20km? ya/tidak" but when user replies with something unexpected like "Banting ?", the bot loses track that it was waiting for a yes/no answer. Instead of re-asking, it resets everything and tells the user to say "cari kerja".
-
-2. When user then says "cari kerja", the bot starts a fresh search at 10km (ignoring that 10km already failed), finds nothing again, and asks about 20km again -- creating a loop.
-
-3. When user finally says "ya", the bot has already forgotten about the expand question and just says "Want to find a job? Say 'cari kerja'".
-
-### The Fix (1 file)
-
-**`supabase/functions/bot-processor/index.ts`**
-
-Two changes in `handleMatchingConversational`:
-
-**Change 1: Re-prompt on unrecognized input during expand question (~line 2923)**
-
-When `expand_search_pending` is true and the user says something that isn't "ya" or "tidak", instead of falling through to the empty-jobs handler, re-ask the expand question clearly.
-
+### Pattern 1: Rigid Fallback Loop (HIGH IMPACT — causes drop-offs)
+When the bot enters `completed` state, it repeats the same robotic message regardless of what the user says:
 ```
-// Current: falls through silently, hits empty-jobs handler, resets state
-// After: re-ask the yes/no question
-if (convState.expand_search_pending) {
-  ...
-  if (isYes) { ... }
-  else if (isNo) { ... }
-  else {
-    // Unrecognized reply -- gently re-ask
-    const currentRadius = convState.current_radius || 10
-    const nextRadius = currentRadius < 20 ? 20 : 50
-    return { response: getText(lang, {
-      ms: `Maaf, Kak Ani tak faham. Nak cari kerja dalam radius ${nextRadius}km?\n\nBalas 'ya' atau 'tidak'.`,
-      en: `Sorry, I didn't understand. Search within ${nextRadius}km?\n\nReply 'yes' or 'no'.`,
-      zh: `抱歉，我没听懂。要搜索${nextRadius}公里内的工作吗？\n\n回复"是"或"不是"。`
-    }), updatedUser: user }
-  }
-}
+User: "Petaling jaya ada"       → "Cakap 'cari kerja' untuk mula cari"
+User: "Shah alam ada"           → "Cakap 'cari kerja' untuk mula cari"
+User: "Ada hostel ke"           → "Cakap 'cari kerja' untuk mula cari"
+User: "Jalan kebun shah alam"   → "Cakap 'cari kerja' untuk mula cari"
+```
+The user is clearly asking about jobs in specific locations, but the bot demands the exact phrase "cari kerja". This is the #1 cause of drop-offs.
+
+### Pattern 2: Implicit Job Searches Not Recognized
+Messages like these are clearly asking to search for jobs but get ignored:
+- "Kak, ade kerja kat Muar?"
+- "Ada kerja kat petaling Jaya?"
+- "Masih ada ambil orang untuk kerjake"
+- "Sy nak krj nilai negeri sembilan"
+- "Ada kerja kat Kuala Lumpur"
+- "Nak Cari Kerja kat seremban"
+
+### Pattern 3: Job Selection Parsing Failures
+The bot only accepts bare numbers. Real users type:
+- "nombor 1" → NOT recognized
+- "N0 3" (zero instead of O) → NOT recognized
+- "Saya ingin mohon nombor 1 jika ada kekosongan" → NOT recognized
+- "1-3" → parsed as "1" instead of asking for clarification
+- "Nombor 1" → NOT recognized
+
+### Pattern 4: Name Overwritten by Location
+User "Najua" provided profile, then typed "Bandar baru nilai" for location. Bot overwrote name to "BANDAR BARU NILAI" and kept asking for location in a loop.
+
+### Pattern 5: Language Lock Failures
+- User says "cakap BM ngan aku la" or "BM pls" → bot continues responding in English
+- User's language preference after onboarding isn't sticky — gets flipped by the mirroring system when they use loanwords like "part time"
+
+### Pattern 6: Questions During Matching Ignored
+- "Ni kilang apa" (What kind of factory is this?)
+- "Ade krj normal ke" (Any normal shift jobs?)
+- "Sy tak nak krj malam" (I don't want night shift)
+- "Ad hostel akk" (Got hostel accommodation?)
+- "Dia minta referral code" (Website is asking for referral code)
+- "Lagi kilang ape ade" (What other factories are there?)
+
+These are all natural questions that should be handled by GPT with job context, not thrown into rigid pattern matching.
+
+---
+
+## Root Cause: Pre-LLM Pattern Matching Steals Every Message
+
+The current flow runs FOUR rigid pattern matchers BEFORE the LLM sees anything:
+
+```text
+Message arrives
+  → detectJobSearchIntent()     ← steals "kerja", "job" keywords
+  → interceptCommand()          ← steals numbers, greetings
+  → extractJobNumber()          ← steals anything numeric  
+  → isMoreCommand()             ← steals "lagi", "more"
+  ↓ only leftovers reach NLU (understandMessage)
 ```
 
-**Change 2: Use remembered radius when "cari kerja" triggers a new search (~line 2935)**
+The fix is to invert this: **LLM-first, pattern-matching as fast-path only for unambiguous tokens**.
 
-In the empty-jobs handler where `detectJobSearchIntent` triggers a new search, check if there was a previous failed radius and start from the next tier (e.g., 20km) instead of always defaulting to 10km.
+---
 
-```
-// Current: findAndPresentJobsConversational(user) -- always 10km
-// After: use previous radius context if available
-const lastRadius = convState.current_radius || convState.last_search_radius || 10
-const searchRadius = lastRadius < 20 ? 20 : (lastRadius < 50 ? 50 : 10)
-const searchResult = await findAndPresentJobsConversational(user, searchRadius)
-```
+## Fix Plan
 
-### Result
+### 1. Enhance `completed.ts` — Make it LLM-Driven (Biggest Impact)
 
-- "Banting ?" during expand prompt: bot re-asks "ya atau tidak?" instead of breaking the flow
-- "cari kerja" after a failed 10km search: searches at 20km directly instead of repeating 10km
-- "ya" to expand question: works correctly because state is preserved
+Currently the `completed` handler has a rigid gate: `detectJobSearchIntent()` runs first. If it returns false, and NLU doesn't classify as `question` or `job_preference`, the user gets the dead-end "Cakap 'cari kerja'" message.
+
+**Change**: Remove the pre-NLU `detectJobSearchIntent` gate. Instead, enhance the NLU prompt for `completed` state to classify a richer set of intents:
+- `job_search_with_location` — "ada kerja kat Muar?" → extract location + trigger search
+- `job_search_generic` — "cari kerja", "nak kerja" → trigger search at current location
+- `question_about_job` — "part time ke full time?" → answer using last_selected_job context
+- `question_general` — "ada hostel?" → answer using GPT
+- `follow_up_issue` — "dia minta referral code" → escalate or answer
+- `greeting` / `other` → warm redirect with options
+
+This means ANY natural phrasing triggers the right action without needing the exact keyword.
+
+### 2. Enhance `matching.ts` — Better Job Selection & Questions
+
+**Job selection parsing**: Expand `extractJobNumber()` in `jobs.ts` to handle:
+- "nombor 1", "no 1", "num 1", "N0 3" (zero-for-O typo)
+- "Saya nak nombor 1", "saya pilih 2"
+- "1-3" → ask which specific number they want
+
+**Question handling**: The matching NLU already handles questions, but the regex-based `relocationSearchIntent` check runs first and can misfire. Move location-based search detection into the NLU classification.
+
+### 3. Fix Name Overwrite Bug in `onboarding.ts`
+
+In the `collect_info` slot merge logic, when only location is missing, the `constrainExtractionToMissingSlot` function should prevent name overwrites. But the current implementation still allows GPT extraction to replace confirmed name with location text.
+
+**Fix**: In `slots.ts` `mergeSlotValue`, add a stronger guard: if a slot has `source: 'confirmed'` or has been set more than once, require an explicit correction signal (e.g., "nama saya sebenarnya X") before allowing overwrite.
+
+### 4. Improve Language Stickiness
+
+- Detect explicit language switch requests: "BM pls", "cakap BM", "in Malay please" → immediately lock to BM
+- Reduce sensitivity of per-turn mirroring: only switch language if 3+ strong signal words detected, not just 1 loanword like "part time"
+
+### 5. Richer NLU Context for All States
+
+Pass more state into the NLU prompt:
+- In `completed`: include `last_selected_job` details so NLU can generate contextual answers in one call
+- In `matching`: include the current page of jobs so NLU can answer "ni kilang apa?" with actual data
+- In `collect_info`: include what's already collected so NLU understands context better
+
+---
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `completed.ts` | Remove `detectJobSearchIntent` gate, add LLM-driven routing with richer intents |
+| `matching.ts` | Move relocation regex into NLU, improve question handling context |
+| `jobs.ts` | Expand `extractJobNumber` to handle natural phrasing |
+| `nlu.ts` | Add state-specific intent types, pass richer context (matched jobs, last job) |
+| `gpt.ts` | Remove `detectJobSearchIntent` function (moved to NLU) |
+| `slots.ts` | Strengthen name protection in `mergeSlotValue` |
+| `helpers.ts` | Reduce language mirroring sensitivity, detect explicit language switch phrases |
+| `commands.ts` | Add "BM pls", "cakap BM" as language switch commands |
+
+### Deployment
+- Redeploy `bot-processor` edge function after changes
 
