@@ -83,3 +83,14 @@ export function resolveMirroredLanguage(message: string, currentLang: string = '
   const detected = detectMessageLanguage(message)
   return detected || currentLang || 'ms'
 }
+
+// ============================================
+// ESCALATION FOOTER — Human contact info
+// ============================================
+export function getEscalationFooter(lang: string): string {
+  return getText(lang, {
+    ms: `\n\n💬 Perlukan bantuan? Hubungi kami:\n📱 WhatsApp: wa.me/60162066861\n📧 Email: info@101kerja.com`,
+    en: `\n\nNeed help? Contact us:\n📱 WhatsApp: wa.me/60162066861\n📧 Email: info@101kerja.com`,
+    zh: `\n\n需要帮助？联系我们：\n📱 WhatsApp: wa.me/60162066861\n📧 Email: info@101kerja.com`
+  })
+}

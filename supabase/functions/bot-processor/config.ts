@@ -8,6 +8,10 @@ export const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY
 export const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')!
 export const AGENCY_BASE_URL = Deno.env.get('AGENCY_BASE_URL') || 'https://101kerja.com/apply'
 
+// Support contact info
+export const SUPPORT_WHATSAPP = '60162066861'
+export const SUPPORT_EMAIL = 'info@101kerja.com'
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 // Session timeout in milliseconds (30 minutes)
