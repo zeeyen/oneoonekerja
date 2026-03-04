@@ -3,6 +3,7 @@
 import { OPENAI_API_KEY, KAK_ANI_SYSTEM_PROMPT } from './config.ts'
 import type { GPTMessage, User } from './types.ts'
 import type { RecentMessage } from './conversation.ts'
+import { getEscalationFooter } from './helpers.ts'
 
 export async function generateKakAniResponse(
   user: User,
@@ -48,7 +49,7 @@ export async function generateKakAniResponse(
 
   } catch (error) {
     console.error('GPT API error:', error)
-    return "Alamak ada masalah teknikal. Cuba lagi sekejap ye?"
+    return "Alamak ada masalah teknikal. Cuba lagi sekejap ye?" + getEscalationFooter('ms')
   }
 }
 

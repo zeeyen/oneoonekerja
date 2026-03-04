@@ -1,5 +1,5 @@
 import { supabase, AGENCY_BASE_URL } from './config.ts'
-import { getText } from './helpers.ts'
+import { getText, getEscalationFooter } from './helpers.ts'
 import type { User, MatchedJob } from './types.ts'
 import { addToRecentMessages } from './conversation.ts'
 import type { RecentMessage } from './conversation.ts'
@@ -92,7 +92,7 @@ export async function handleMatchingConversational(
         ms: `Ok takpe. Balas 'semula' bila nak cari kerja kat lokasi lain ye.`,
         en: `No problem. Reply 'restart' when you want to search in a different location.`,
         zh: `没关系。回复"重新开始"可以搜索其他位置。`
-      })
+      }) + getEscalationFooter(lang)
       return { response: resp, updatedUser: { ...user, onboarding_status: 'completed', conversation_state: {} } }
     }
     // Unrecognized reply -- gently re-ask the yes/no question
@@ -156,7 +156,7 @@ export async function handleMatchingConversational(
       ms: `Hai ${firstName}! Tak ada kerja dalam senarai. Cakap "cari kerja" untuk mula cari.`,
       en: `Hi ${firstName}! No jobs in your list. Say "find job" to start searching.`,
       zh: `你好 ${firstName}！列表里没有工作。说"找工作"开始搜索。`
-    })
+    }) + getEscalationFooter(lang)
     return { response, updatedUser: { ...user, onboarding_status: 'completed', conversation_state: {} } }
   }
 
@@ -229,7 +229,7 @@ ms: `Best! Adik pilih:\n\n*${displayTitle}* di *${selectedJob.company}*\n📍 ${
         ms: `Dah habis senarai kerja! Adik dah tengok semua ${matchedJobs.length} kerja yang ada.\n\nNak buat apa?\n• Balas nombor (1-${matchedJobs.length}) untuk mohon mana-mana kerja\n• Balas 'semula' untuk cari semula dari awal`,
         en: `That's all the jobs! You've seen all ${matchedJobs.length} available jobs.\n\nWhat would you like to do?\n• Reply with a number (1-${matchedJobs.length}) to apply for any job\n• Reply 'restart' to search again from the beginning`,
         zh: `已经看完所有工作了！您已浏览了全部${matchedJobs.length}个职位。\n\n您想要：\n• 回复数字（1-${matchedJobs.length}）申请任何工作\n• 回复「重新开始」从头搜索`
-      })
+      }) + getEscalationFooter(lang)
       return {
         response: endMessage,
         updatedUser: user

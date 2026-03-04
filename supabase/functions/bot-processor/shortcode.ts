@@ -1,5 +1,5 @@
 import { supabase } from './config.ts'
-import { getText } from './helpers.ts'
+import { getText, getEscalationFooter } from './helpers.ts'
 import type { User, MatchedJob } from './types.ts'
 import { formatJobsMessage } from './jobs.ts'
 
@@ -103,7 +103,7 @@ export async function handleShortcodeSearch(
   if (error) {
     console.error('Shortcode search error:', error)
     return {
-      response: 'Alamak ada masalah teknikal. Cuba hantar mesej sekali lagi ye?',
+      response: 'Alamak ada masalah teknikal. Cuba hantar mesej sekali lagi ye?' + getEscalationFooter(lang),
       updatedUser: user
     }
   }
@@ -119,7 +119,7 @@ export async function handleShortcodeSearch(
         ms: `Maaf ${firstName}, tiada kerja dijumpai untuk "${expanded}".\n\nBalas 'semula' untuk cari kerja lain.`,
         en: `Sorry ${firstName}, no jobs found for "${expanded}".\n\nReply 'restart' to search for other jobs.`,
         zh: `抱歉${firstName}，没有找到"${expanded}"的工作。\n\n回复「重新开始」搜索其他工作。`
-      })
+      }) + getEscalationFooter(lang)
       return { response: noJobsMsg, updatedUser: user }
     } else {
       // New user - fall through to normal onboarding

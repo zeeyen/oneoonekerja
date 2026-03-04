@@ -2,7 +2,7 @@
 // Now fully LLM-driven: NO pre-NLU pattern matching gates.
 
 import { supabase } from './config.ts'
-import { getText } from './helpers.ts'
+import { getText, getEscalationFooter } from './helpers.ts'
 import { User } from './types.ts'
 import { RecentMessage, addToRecentMessages } from './conversation.ts'
 import { understandMessage } from './nlu.ts'
@@ -177,11 +177,11 @@ export async function handleCompletedUserConversational(
 
   // === CONFUSION ===
   if (nlu.messageType === 'confusion') {
-    const resp = nlu.contextualResponse || getText(lang, {
+    const resp = (nlu.contextualResponse || getText(lang, {
       ms: `Takpe ${firstName}, Kak Ani kat sini nak tolong. Nak cari kerja? Cakap je lokasi yang adik nak, contoh "ada kerja kat Shah Alam?"`,
       en: `No worries ${firstName}, I'm here to help. Want to find a job? Just tell me the location, e.g. "any jobs in Shah Alam?"`,
       zh: `没关系${firstName}，我在这里帮你。想找工作吗？告诉我地点就行，比如"Shah Alam有工作吗？"`
-    })
+    })) + getEscalationFooter(lang)
 
     const updatedRecent = addToRecentMessages(convState, message, resp)
     await supabase.from('applicants').update({

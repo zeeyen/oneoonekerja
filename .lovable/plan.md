@@ -1,78 +1,62 @@
 
 
-## Graceful Escalation to Human — Current State & Plan
+## Fix: "Ya" Not Expanding to 20km + Unrecognized Input Breaking Expand Flow
 
-### Current State: No escalation exists
+### What's Happening
 
-The bot has **zero** paths that offer the applicant a way to reach a human. The only place contact info appears is `support@101kerja.com` in the profanity ban messages — and that's for appeals, not general help.
+The conversation flow breaks at two points:
 
-### Exhaustive List of Situations Where Escalation Should Be Offered
+1. Bot asks "expand to 20km? ya/tidak" but when user replies with something unexpected like "Banting ?", the bot loses track that it was waiting for a yes/no answer. Instead of re-asking, it resets everything and tells the user to say "cari kerja".
 
-Here are all the dead-end or frustration scenarios currently in the codebase:
+2. When user then says "cari kerja", the bot starts a fresh search at 10km (ignoring that 10km already failed), finds nothing again, and asks about 20km again -- creating a loop.
 
-| # | Situation | Current file & behavior | What happens now |
-|---|-----------|------------------------|------------------|
-| 1 | **No jobs at max radius (50km)** | `jobs.ts` line 190-197 | "Tiada kerja... balas 'semula'" — no human contact |
-| 2 | **User declines radius expansion** | `matching.ts` line 83-96 | "Balas 'semula'" — dead end |
-| 3 | **No jobs at all in DB** | `jobs.ts` line 114-122 | "Takde kerja... cuba check balik" — dead end |
-| 4 | **No jobs in matching state (empty list)** | `matching.ts` line 146-160 | Resets to completed, says "cakap cari kerja" |
-| 5 | **Shortcode returns no jobs** | `shortcode.ts` line 111-138 | "Tiada kerja dijumpai... balas semula" |
-| 6 | **End of job list (all jobs viewed)** | `matching.ts` line 226-237 | "Dah habis senarai" — no escalation |
-| 7 | **Confusion in completed state** | `completed.ts` line 178-193 | GPT response nudging "cari kerja" — no human option |
-| 8 | **GPT API failure** | `gpt.ts` line 49-51 | "Ada masalah teknikal" — no contact info |
-| 9 | **NLU API failure / 429 quota** | `nlu.ts` (fallback) | Falls back to safe default — no human option |
-| 10 | **Bot processor top-level error** | `index.ts` catch block | "Ada masalah teknikal la adik" — no contact |
-| 11 | **Repeated fallback responses** | `matching.ts` line 353-372, `completed.ts` line 195-217 | GPT tries to answer but user may still be stuck |
-| 12 | **Session expired — user confused** | `session.ts` line 100-115 | If user doesn't reply 1/2 and no location detected, falls through to re-show menu |
-| 13 | **Ban message** | `index.ts` line 67-72, `profanity.ts` line 82-97 | Shows `support@101kerja.com` — already has contact but wrong one |
+3. When user finally says "ya", the bot has already forgotten about the expand question and just says "Want to find a job? Say 'cari kerja'".
 
-### Proposed Implementation
+### The Fix (1 file)
 
-**1. Create a shared escalation footer helper** in `helpers.ts`:
+**`supabase/functions/bot-processor/index.ts`**
 
-```typescript
-export function getEscalationFooter(lang: string): string {
-  return getText(lang, {
-    ms: `\n\n💬 Perlukan bantuan? Hubungi kami:\n📱 WhatsApp: wa.me/60162066861\n📧 Email: info@101kerja.com`,
-    en: `\n\nNeed help? Contact us:\n📱 WhatsApp: wa.me/60162066861\n📧 Email: info@101kerja.com`,
-    zh: `\n\n需要帮助？联系我们：\n📱 WhatsApp: wa.me/60162066861\n📧 Email: info@101kerja.com`
-  })
+Two changes in `handleMatchingConversational`:
+
+**Change 1: Re-prompt on unrecognized input during expand question (~line 2923)**
+
+When `expand_search_pending` is true and the user says something that isn't "ya" or "tidak", instead of falling through to the empty-jobs handler, re-ask the expand question clearly.
+
+```
+// Current: falls through silently, hits empty-jobs handler, resets state
+// After: re-ask the yes/no question
+if (convState.expand_search_pending) {
+  ...
+  if (isYes) { ... }
+  else if (isNo) { ... }
+  else {
+    // Unrecognized reply -- gently re-ask
+    const currentRadius = convState.current_radius || 10
+    const nextRadius = currentRadius < 20 ? 20 : 50
+    return { response: getText(lang, {
+      ms: `Maaf, Kak Ani tak faham. Nak cari kerja dalam radius ${nextRadius}km?\n\nBalas 'ya' atau 'tidak'.`,
+      en: `Sorry, I didn't understand. Search within ${nextRadius}km?\n\nReply 'yes' or 'no'.`,
+      zh: `抱歉，我没听懂。要搜索${nextRadius}公里内的工作吗？\n\n回复"是"或"不是"。`
+    }), updatedUser: user }
+  }
 }
 ```
 
-**2. Append the footer in these files/scenarios:**
+**Change 2: Use remembered radius when "cari kerja" triggers a new search (~line 2935)**
 
-| File | Scenario | Where to append |
-|------|----------|-----------------|
-| `jobs.ts` | No jobs at max radius (line 191) | After "tiada kerja" message |
-| `jobs.ts` | No jobs in DB at all (line 117) | After "takde kerja" message |
-| `matching.ts` | User declines expansion (line 91) | After "ok takpe" message |
-| `matching.ts` | No jobs in state, no search intent (line 155) | After "tak ada kerja" message |
-| `matching.ts` | End of job list (line 228) | After "dah habis senarai" message |
-| `shortcode.ts` | Shortcode no results (line 118, 126) | After "tiada kerja dijumpai" message |
-| `completed.ts` | Confusion handler (line 180) | After confusion response |
-| `gpt.ts` | API error fallback (line 51) | After "masalah teknikal" message |
-| `index.ts` | Top-level catch (line ~last) | After "masalah teknikal" message |
-| `profanity.ts` | Ban messages (line 84, 94) | Update `support@101kerja.com` → `info@101kerja.com` + WhatsApp |
+In the empty-jobs handler where `detectJobSearchIntent` triggers a new search, check if there was a previous failed radius and start from the next tier (e.g., 20km) instead of always defaulting to 10km.
 
-**3. Update `config.ts`** — add contact constants so they're easy to change:
-
-```typescript
-export const SUPPORT_WHATSAPP = '60162066861'
-export const SUPPORT_EMAIL = 'info@101kerja.com'
+```
+// Current: findAndPresentJobsConversational(user) -- always 10km
+// After: use previous radius context if available
+const lastRadius = convState.current_radius || convState.last_search_radius || 10
+const searchRadius = lastRadius < 20 ? 20 : (lastRadius < 50 ? 50 : 10)
+const searchResult = await findAndPresentJobsConversational(user, searchRadius)
 ```
 
-### Files Changed
+### Result
 
-| File | Change |
-|------|--------|
-| `config.ts` | Add contact constants |
-| `helpers.ts` | Add `getEscalationFooter()` helper |
-| `jobs.ts` | Append footer to no-jobs scenarios |
-| `matching.ts` | Append footer to dead-end scenarios |
-| `shortcode.ts` | Append footer to no-results |
-| `completed.ts` | Append footer to confusion handler |
-| `gpt.ts` | Append footer to API error fallback |
-| `index.ts` | Append footer to top-level error catch |
-| `profanity.ts` | Update ban contact info |
+- "Banting ?" during expand prompt: bot re-asks "ya atau tidak?" instead of breaking the flow
+- "cari kerja" after a failed 10km search: searches at 20km directly instead of repeating 10km
+- "ya" to expand question: works correctly because state is preserved
 
