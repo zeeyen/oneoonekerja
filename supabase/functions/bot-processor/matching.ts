@@ -309,9 +309,13 @@ ms: `Best! Adik pilih:\n\n*${displayTitle}* di *${selectedJob.company}*\n📍 ${
     } else {
       const jobsSummary = currentPageJobs
         .map((j, i) => `${currentIndex + i + 1}. ${j.title} at ${j.company} (${j.location_city}, Type: ${j.job_type || 'Not specified'}, Salary: ${j.salary_range || 'N/A'})`).join('\n')
-      const ctx = `User is viewing jobs and asking a question. Current jobs shown:\n${jobsSummary}\n\nAnswer their question using the job info above. Then remind them to reply with a number (${pageStart}-${pageEnd}) to apply or 'lagi'/'more' for more options. Keep it short.`
+      const ctx = `User is viewing jobs and asking a question. Current jobs shown:\n${jobsSummary}\n\nAnswer their question using the job info above. Do NOT list the jobs again in your answer — they will be shown separately. Keep it short.`
       gptResp = await generateKakAniResponse(user, message, ctx, recentMsgsMatch)
     }
+
+    // Always append current job page so user can see & select
+    const jobsDisplayQ = formatJobsMessage(matchedJobs, currentIndex, lang)
+    gptResp = `${gptResp}\n\n${jobsDisplayQ}`
 
     const updatedRecent = addToRecentMessages(convState, message, gptResp)
     const newState = { ...convState, recent_messages: updatedRecent }
@@ -328,9 +332,13 @@ ms: `Best! Adik pilih:\n\n*${displayTitle}* di *${selectedJob.company}*\n📍 ${
     if (matchNlu.contextualResponse) {
       gptResp = matchNlu.contextualResponse
     } else {
-      const ctx = `User is expressing a job preference while viewing job listings. Acknowledge their preference. Then remind them to pick a job number (${pageStart}-${pageEnd}) from the current list, say 'lagi'/'more' for more, or 'semula'/'restart' to search with different criteria. Keep it short.`
+      const ctx = `User is expressing a job preference while viewing job listings. Acknowledge their preference. Do NOT list the jobs — they will be shown separately. Keep it short.`
       gptResp = await generateKakAniResponse(user, message, ctx, recentMsgsMatch)
     }
+
+    // Always append current job page so user can see & select
+    const jobsDisplayP = formatJobsMessage(matchedJobs, currentIndex, lang)
+    gptResp = `${gptResp}\n\n${jobsDisplayP}`
 
     const updatedRecent = addToRecentMessages(convState, message, gptResp)
     const newState = { ...convState, recent_messages: updatedRecent }
@@ -346,8 +354,12 @@ ms: `Best! Adik pilih:\n\n*${displayTitle}* di *${selectedJob.company}*\n📍 ${
   {
     const jobsSummary = currentPageJobs
       .map((j, i) => `${currentIndex + i + 1}. ${j.title} at ${j.company} (${j.location_city}, Type: ${j.job_type || 'Not specified'}, Salary: ${j.salary_range || 'N/A'})`).join('\n')
-    const ctx = `User is viewing job listings. Current jobs shown:\n${jobsSummary}\n\nRespond naturally to whatever the user said. If they seem to be asking about a job, answer using the info above. Then remind them to reply with a number (${pageStart}-${pageEnd}) to apply or 'lagi'/'more' for more options. Keep it short. Language: ${lang === 'zh' ? 'Chinese' : lang === 'en' ? 'English' : 'casual Malay'}.`
-    const gptResp = await generateKakAniResponse(user, message, ctx, recentMsgsMatch)
+    const ctx = `User is viewing job listings. Current jobs shown:\n${jobsSummary}\n\nRespond naturally to whatever the user said. Do NOT list the jobs — they will be shown separately. Keep it short. Language: ${lang === 'zh' ? 'Chinese' : lang === 'en' ? 'English' : 'casual Malay'}.`
+    let gptResp = await generateKakAniResponse(user, message, ctx, recentMsgsMatch)
+
+    // Always append current job page so user can see & select
+    const jobsDisplayF = formatJobsMessage(matchedJobs, currentIndex, lang)
+    gptResp = `${gptResp}\n\n${jobsDisplayF}`
 
     const updatedRecent = addToRecentMessages(convState, message, gptResp)
     const newState = { ...convState, recent_messages: updatedRecent }
