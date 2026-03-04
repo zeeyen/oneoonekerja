@@ -1,5 +1,5 @@
 import { supabase } from './config.ts'
-import { getText } from './helpers.ts'
+import { getText, getEscalationFooter } from './helpers.ts'
 import type { User, MatchedJob } from './types.ts'
 import { calculateDistance, geocodeUserLocation } from './location.ts'
 import { getUserJobSelections } from './job-selections.ts'
@@ -117,7 +117,7 @@ export async function findAndPresentJobsConversational(user: User, radiusKm: num
         ms: `Hmm takde kerja yang match sekarang. Cuba check balik dalam beberapa hari ye.`,
         en: `Hmm no jobs match right now. Try checking again in a few days.`,
         zh: `嗯，目前没有匹配的工作。过几天再来看看。`
-      }),
+      }) + getEscalationFooter(lang),
       jobs: []
     }
   }
@@ -192,7 +192,7 @@ export async function findAndPresentJobsConversational(user: User, radiusKm: num
         ms: `Maaf, tiada kerja dalam ${radiusKm}km dari ${locationText}.\n\nTip: Balas 'semula' untuk cari lokasi lain.`,
         en: `Sorry, no jobs within ${radiusKm}km of ${locationText}.\n\nTip: Reply 'restart' to try a different location.`,
         zh: `抱歉，${locationText}${radiusKm}公里内没有工作。\n\n提示：回复"重新开始"尝试其他位置。`
-      }),
+      }) + getEscalationFooter(lang),
       jobs: []
     }
   }

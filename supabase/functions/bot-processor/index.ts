@@ -10,7 +10,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 // Module imports — only what the serve() entry point needs
 import { supabase } from './config.ts'
 import type { ProcessRequest } from './types.ts'
-import { getText, resolveMirroredLanguage } from './helpers.ts'
+import { getText, resolveMirroredLanguage, getEscalationFooter } from './helpers.ts'
 import { containsProfanity, handleProfanityViolation } from './profanity.ts'
 import { handleThanosReset, jsonResponse, updateUserInDB } from './db.ts'
 import { checkSessionTimeout, handleSessionExpired } from './session.ts'
@@ -142,7 +142,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('❌ Bot processor error:', error)
     return jsonResponse({
-      response: "Alamak, ada masalah teknikal la adik. Cuba hantar mesej sekali lagi ye?",
+      response: "Alamak, ada masalah teknikal la adik. Cuba hantar mesej sekali lagi ye?" + getEscalationFooter('ms'),
       error: error.message
     })
   }

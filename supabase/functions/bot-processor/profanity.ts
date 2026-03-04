@@ -81,9 +81,9 @@ export async function handleProfanityViolation(user: User, message: string): Pro
     banUntil = new Date(Date.now() + 72 * 60 * 60 * 1000) // 72 hours
     banReason = 'Penggunaan bahasa tidak sesuai berulang kali (4 kali)'
   response = getText(lang, {
-      ms: `🚫 *Akaun Disekat 72 Jam*\n\nIni kali ke-4 adik melanggar peraturan. Akaun disekat selama 3 hari.\n\nSila hubungi kami di support@101kerja.com jika ada pertanyaan.`,
-      en: `🚫 *Account Suspended 72 Hours*\n\nThis is your 4th violation. Your account is suspended for 3 days.\n\nPlease contact us at support@101kerja.com if you have questions.`,
-      zh: `🚫 *账户被封禁72小时*\n\n这是您第4次违规。您的账户被封禁3天。\n\n如有疑问请联系 support@101kerja.com。`
+      ms: `🚫 *Akaun Disekat 72 Jam*\n\nIni kali ke-4 adik melanggar peraturan. Akaun disekat selama 3 hari.\n\nSila hubungi kami jika ada pertanyaan:\n📱 WhatsApp: wa.me/60162066861\n📧 Email: info@101kerja.com`,
+      en: `🚫 *Account Suspended 72 Hours*\n\nThis is your 4th violation. Your account is suspended for 3 days.\n\nPlease contact us if you have questions:\n📱 WhatsApp: wa.me/60162066861\n📧 Email: info@101kerja.com`,
+      zh: `🚫 *账户被封禁72小时*\n\n这是您第4次违规。您的账户被封禁3天。\n\n如有疑问请联系我们：\n📱 WhatsApp: wa.me/60162066861\n📧 Email: info@101kerja.com`
     })
   } else {
     // Fifth+ violation: 7-day ban (or permanent for repeat offenders)
@@ -91,9 +91,9 @@ export async function handleProfanityViolation(user: User, message: string): Pro
     banUntil = new Date(Date.now() + banDays * 24 * 60 * 60 * 1000)
     banReason = `Penggunaan bahasa tidak sesuai berulang kali (${currentViolations} kali)`
     response = getText(lang, {
-      ms: `🚫 *Akaun Disekat ${banDays} Hari*\n\nAdik telah melanggar peraturan ${currentViolations} kali. Akaun disekat selama ${banDays} hari.\n\nHubungi kami di support@101kerja.com untuk rayuan.`,
-      en: `🚫 *Account Suspended ${banDays} Days*\n\nYou have violated our guidelines ${currentViolations} times. Your account is suspended for ${banDays} days.\n\nContact us at support@101kerja.com to appeal.`,
-      zh: `🚫 *账户被封禁${banDays}天*\n\n您已违规${currentViolations}次。您的账户被封禁${banDays}天。\n\n请联系 support@101kerja.com 申诉。`
+      ms: `🚫 *Akaun Disekat ${banDays} Hari*\n\nAdik telah melanggar peraturan ${currentViolations} kali. Akaun disekat selama ${banDays} hari.\n\nHubungi kami untuk rayuan:\n📱 WhatsApp: wa.me/60162066861\n📧 Email: info@101kerja.com`,
+      en: `🚫 *Account Suspended ${banDays} Days*\n\nYou have violated our guidelines ${currentViolations} times. Your account is suspended for ${banDays} days.\n\nContact us to appeal:\n📱 WhatsApp: wa.me/60162066861\n📧 Email: info@101kerja.com`,
+      zh: `🚫 *账户被封禁${banDays}天*\n\n您已违规${currentViolations}次。您的账户被封禁${banDays}天。\n\n联系我们申诉：\n📱 WhatsApp: wa.me/60162066861\n📧 Email: info@101kerja.com`
     })
   }
 
