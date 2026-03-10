@@ -10,6 +10,25 @@
 export function stripBotTemplate(message: string): string {
   const trimmed = message.trim()
 
+  // Check for bullet-point bot template format:
+  // - Nama penuh : VALUE
+  // - Umur : VALUE
+  // - Lelaki/Perempuan : VALUE
+  // - Duduk mana (bandar, negeri) : VALUE
+  const bulletLabelPattern = /^-\s*(?:nama penuh|nama|full name|name|umur|age|lelaki\/perempuan|jantina|gender|duduk mana(?:\s*\([^)]*\))?|lokasi(?:\s*\([^)]*\))?|location(?:\s*\([^)]*\))?)\s*[:=]\s*/i
+  const lines = trimmed.split(/[\n\r]+/)
+  const bulletValues: string[] = []
+  for (const line of lines) {
+    const match = line.trim().match(bulletLabelPattern)
+    if (match) {
+      const value = line.trim().slice(match[0].length).trim()
+      if (value) bulletValues.push(value)
+    }
+  }
+  if (bulletValues.length >= 2) {
+    return bulletValues.join(', ')
+  }
+
   // Check if message looks like a copy-pasted bot template with labeled fields
   // Pattern: lines starting with field labels like "Nama:", "Umur:", "Name:", "Age:", etc.
   const labelPattern = /^(nama|name|umur|age|jantina|gender|lokasi|location|city|bandar|negeri|state|姓名|年龄|性别|地点)\s*[:=]\s*/gmi

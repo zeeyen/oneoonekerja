@@ -92,9 +92,9 @@ export function formatJobSelectionsMessage(selections: JobSelection[], lang: str
   }).join('\n\n')
 
   const disclaimer = getText(lang, {
-    ms: `\n━━━━━━━━━━━━━━━━━━━━\n📝 Lepas pilih, jangan lupa klik link dan daftar kat website ye. Baru permohonan adik lengkap! 😊`,
-    en: `\n━━━━━━━━━━━━━━━━━━━━\n📝 After selecting, don't forget to click the link and register on the website to complete your application! 😊`,
-    zh: `\n━━━━━━━━━━━━━━━━━━━━\n📝 选择后，别忘了点击链接并在网站上注册，这样申请才算完成哦！😊`
+    ms: `\n━━━━━━━━━━━━━━━━━━━━\nJangan lupa klik link dan daftar ye. Kak Ani doakan adik dapat! 💪`,
+    en: `\n━━━━━━━━━━━━━━━━━━━━\nDon't forget to click the link and register. Rooting for you! 💪`,
+    zh: `\n━━━━━━━━━━━━━━━━━━━━\n别忘了点击链接注册哦。加油，祝你成功！💪`
   })
 
   return `${header}\n${jobLines}${disclaimer}`
