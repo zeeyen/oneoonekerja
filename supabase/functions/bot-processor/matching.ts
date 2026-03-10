@@ -203,9 +203,9 @@ export async function handleMatchingConversational(
       const displayTitle = selectedJob.external_job_id ? `${selectedJob.title} (${selectedJob.external_job_id})` : selectedJob.title
 
       const response = getText(lang, {
-ms: `Best! Adik pilih:\n\n*${displayTitle}* di *${selectedJob.company}*\n📍 ${location}\n💰 ${salary}\n\n👉 Klik untuk daftar: ${applyUrl}\n\n⚠️ *PENTING:* Pilih kat sini baru langkah pertama! Adik WAJIB klik link dan daftar kat website untuk lengkapkan permohonan.\n\nBalas 'semula' nak cari kerja lain.`,
-        en: `Great choice!\n\n*${displayTitle}* at *${selectedJob.company}*\n📍 ${location}\n💰 ${salary}\n\n👉 Click to register: ${applyUrl}\n\n⚠️ *IMPORTANT:* Selecting here is just the first step! You MUST click the link and register on the website to complete your application.\n\nReply 'restart' to find more jobs.`,
-        zh: `好选择！\n\n*${selectedJob.company}* 的 *${displayTitle}*\n📍 ${location}\n💰 ${salary}\n\n👉 点击注册：${applyUrl}\n\n⚠️ *重要：* 在这里选择只是第一步！您必须点击链接并在网站上注册才能完成申请。\n\n回复「重新开始」找更多工作。`
+        ms: `Best! Adik pilih:\n\n*${displayTitle}* di *${selectedJob.company}*\n📍 ${location}\n💰 ${salary}\n\n👉 Klik untuk daftar: ${applyUrl}\n\nLepas ni klik link tu dan daftar ye. Kak Ani doakan adik dapat kerja ni! 💪\n\nBalas 'semula' nak cari kerja lain.`,
+        en: `Great choice!\n\n*${displayTitle}* at *${selectedJob.company}*\n📍 ${location}\n💰 ${salary}\n\n👉 Click to register: ${applyUrl}\n\nClick the link and register next. Rooting for you! 💪\n\nReply 'restart' to find more jobs.`,
+        zh: `好选择！\n\n*${selectedJob.company}* 的 *${displayTitle}*\n📍 ${location}\n💰 ${salary}\n\n👉 点击注册：${applyUrl}\n\n接下来点击链接注册吧。加油，祝你成功！💪\n\n回复「重新开始」找更多工作。`
       })
 
       return {
