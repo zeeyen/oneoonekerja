@@ -335,6 +335,7 @@ export type Database = {
       }
       jobs: {
         Row: {
+          branch: string | null
           company: string | null
           country: string | null
           created_at: string | null
@@ -356,10 +357,12 @@ export type Database = {
           min_experience_years: number | null
           postcode: string | null
           salary_range: string | null
+          status: string | null
           title: string
           url: string | null
         }
         Insert: {
+          branch?: string | null
           company?: string | null
           country?: string | null
           created_at?: string | null
@@ -381,10 +384,12 @@ export type Database = {
           min_experience_years?: number | null
           postcode?: string | null
           salary_range?: string | null
+          status?: string | null
           title: string
           url?: string | null
         }
         Update: {
+          branch?: string | null
           company?: string | null
           country?: string | null
           created_at?: string | null
@@ -406,6 +411,7 @@ export type Database = {
           min_experience_years?: number | null
           postcode?: string | null
           salary_range?: string | null
+          status?: string | null
           title?: string
           url?: string | null
         }

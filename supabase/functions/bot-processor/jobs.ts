@@ -88,6 +88,7 @@ export async function findAndPresentJobsConversational(user: User, radiusKm: num
     .from('jobs')
     .select('*')
     .gte('expire_by', today)
+    .or('status.eq.open,status.eq.active,status.is.null')
 
   if (user.gender) {
     query = query.or(`gender_requirement.eq.any,gender_requirement.eq.${user.gender}`)
@@ -209,7 +210,8 @@ export async function findAndPresentJobsConversational(user: User, radiusKm: num
     industry: s.job.industry,
     distance: Math.round(s.distance),
     external_job_id: s.job.external_job_id,
-    job_type: s.job.job_type
+    job_type: s.job.job_type,
+    branch: s.job.branch
   }))
 
   const message = formatJobsMessage(topJobs, 0, lang)
@@ -290,6 +292,9 @@ export function formatJobsMessage(jobs: MatchedJob[], startIndex: number, langua
     const displayTitle = job.external_job_id ? `${job.title} (${job.external_job_id})` : job.title
     message += `*${jobNumber}. ${displayTitle}*\n`
     message += `🏢 ${job.company}\n`
+    if ((job as any).branch) {
+      message += `📍 Branch: ${(job as any).branch}\n`
+    }
     message += `📍 ${l.location}: ${location}\n`
     message += `💰 ${l.salary}: ${salary}\n`
     if (job.job_type) {
