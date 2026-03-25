@@ -221,15 +221,7 @@ export default function JobDetailPage() {
               )}
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <Badge
-                className={
-                  isExpired
-                    ? 'bg-destructive/10 text-destructive border-destructive/20'
-                    : 'bg-green-100 text-green-800 border-green-200'
-                }
-              >
-                {isExpired ? 'Expired' : 'Active'}
-              </Badge>
+              {statusBadge()}
               {job.industry && <Badge variant="outline">{job.industry}</Badge>}
               {user && !isEditing && (
                 <Button variant="outline" onClick={() => setIsEditing(true)}>
