@@ -147,7 +147,23 @@ export default function JobDetailPage() {
     );
   }
 
-  const isExpired = isPast(parseISO(job.expire_by));
+  const isExpired = job.status === 'cancelled' || job.status === 'completed' || isPast(parseISO(job.expire_by));
+
+  const statusBadge = () => {
+    const status = job.status || (isExpired ? 'expired' : 'active');
+    const styles: Record<string, string> = {
+      active: 'bg-green-100 text-green-800 border-green-200',
+      open: 'bg-green-100 text-green-800 border-green-200',
+      completed: 'bg-muted text-muted-foreground border-border',
+      cancelled: 'bg-destructive/10 text-destructive border-destructive/20',
+      expired: 'bg-destructive/10 text-destructive border-destructive/20',
+    };
+    return (
+      <Badge className={styles[status] || styles.active}>
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </Badge>
+    );
+  };
 
   const formatAgeRange = () => {
     if (job.min_age && job.max_age) {
