@@ -99,6 +99,9 @@ export default function JobDetailPage() {
           url: formData.url || null,
           postcode: formData.postcode || null,
           location_address: formData.location_address || null,
+          branch: formData.branch || null,
+          status: formData.status || 'active',
+          job_type: formData.job_type || null,
           last_edited_by: user.id,
           last_edited_at: new Date().toISOString(),
         })
