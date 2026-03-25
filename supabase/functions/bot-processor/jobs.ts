@@ -292,6 +292,9 @@ export function formatJobsMessage(jobs: MatchedJob[], startIndex: number, langua
     const displayTitle = job.external_job_id ? `${job.title} (${job.external_job_id})` : job.title
     message += `*${jobNumber}. ${displayTitle}*\n`
     message += `🏢 ${job.company}\n`
+    if ((job as any).branch) {
+      message += `📍 Branch: ${(job as any).branch}\n`
+    }
     message += `📍 ${l.location}: ${location}\n`
     message += `💰 ${l.salary}: ${salary}\n`
     if (job.job_type) {
