@@ -283,6 +283,13 @@ export default function JobDetailPage() {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <Building className="h-4 w-4" />
+                    Branch
+                  </label>
+                  <p className="mt-1">{job.branch || 'Not specified'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                     <Tag className="h-4 w-4" />
                     Job Type
                   </label>
