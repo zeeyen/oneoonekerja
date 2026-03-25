@@ -117,6 +117,9 @@ const HEADER_ALIAS_MAP: Record<string, string> = {
   'gender requirement': 'gender_requirement',
   'age min': 'age_min',
   'age max': 'age_max',
+  'job id': 'job_id',
+  'job type': 'job_type',
+  'end date': 'end_date',
 };
 
 const CSV_HEADERS = INTERNAL_FIELDS;
