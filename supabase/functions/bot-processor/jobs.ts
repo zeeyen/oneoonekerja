@@ -210,7 +210,8 @@ export async function findAndPresentJobsConversational(user: User, radiusKm: num
     industry: s.job.industry,
     distance: Math.round(s.distance),
     external_job_id: s.job.external_job_id,
-    job_type: s.job.job_type
+    job_type: s.job.job_type,
+    branch: s.job.branch
   }))
 
   const message = formatJobsMessage(topJobs, 0, lang)
