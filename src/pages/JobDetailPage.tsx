@@ -313,7 +313,13 @@ export default function JobDetailPage() {
                   <p className="mt-1">{genderLabels[job.gender_requirement] || 'Any'}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Age Range</label>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <CircleDot className="h-4 w-4" />
+                    Status
+                  </label>
+                  <p className="mt-1 capitalize">{job.status || 'active'}</p>
+                </div>
+                <div>
                   <p className="mt-1">{formatAgeRange()}</p>
                 </div>
                 <div>
