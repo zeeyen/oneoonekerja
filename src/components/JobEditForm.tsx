@@ -38,6 +38,9 @@ export interface JobEditFormData {
   url: string;
   postcode: string;
   location_address: string;
+  branch: string;
+  status: string;
+  job_type: string;
 }
 
 interface JobEditFormProps {
@@ -63,6 +66,9 @@ export function JobEditForm({ job, onSave, onCancel, isSaving }: JobEditFormProp
     url: job.url || '',
     postcode: job.postcode || '',
     location_address: job.location_address || '',
+    branch: job.branch || '',
+    status: job.status || 'active',
+    job_type: job.job_type || '',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -265,6 +271,45 @@ export function JobEditForm({ job, onSave, onCancel, isSaving }: JobEditFormProp
 
           {/* Right column */}
           <div className="space-y-4">
+            <div>
+              <Label htmlFor="branch">Branch</Label>
+              <Input
+                id="branch"
+                value={formData.branch}
+                onChange={(e) => handleInputChange('branch', e.target.value)}
+                placeholder="e.g., HQ, Subang Branch"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="status">Status</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value) => handleInputChange('status', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {['active', 'open', 'completed', 'cancelled'].map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s.charAt(0).toUpperCase() + s.slice(1)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="job_type">Job Type</Label>
+              <Input
+                id="job_type"
+                value={formData.job_type}
+                onChange={(e) => handleInputChange('job_type', e.target.value)}
+                placeholder="e.g., Full-time, Part-time"
+              />
+            </div>
+
             <div>
               <Label>Gender Requirement</Label>
               <RadioGroup

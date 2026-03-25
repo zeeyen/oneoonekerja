@@ -28,6 +28,8 @@ import {
   Pencil,
   Hash,
   Tag,
+  Building,
+  CircleDot,
 } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 import { JobEditForm, type JobEditFormData } from '@/components/JobEditForm';
@@ -97,6 +99,9 @@ export default function JobDetailPage() {
           url: formData.url || null,
           postcode: formData.postcode || null,
           location_address: formData.location_address || null,
+          branch: formData.branch || null,
+          status: formData.status || 'active',
+          job_type: formData.job_type || null,
           last_edited_by: user.id,
           last_edited_at: new Date().toISOString(),
         })
@@ -142,7 +147,23 @@ export default function JobDetailPage() {
     );
   }
 
-  const isExpired = isPast(parseISO(job.expire_by));
+  const isExpired = job.status === 'cancelled' || job.status === 'completed' || isPast(parseISO(job.expire_by));
+
+  const statusBadge = () => {
+    const status = job.status || (isExpired ? 'expired' : 'active');
+    const styles: Record<string, string> = {
+      active: 'bg-green-100 text-green-800 border-green-200',
+      open: 'bg-green-100 text-green-800 border-green-200',
+      completed: 'bg-muted text-muted-foreground border-border',
+      cancelled: 'bg-destructive/10 text-destructive border-destructive/20',
+      expired: 'bg-destructive/10 text-destructive border-destructive/20',
+    };
+    return (
+      <Badge className={styles[status] || styles.active}>
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </Badge>
+    );
+  };
 
   const formatAgeRange = () => {
     if (job.min_age && job.max_age) {
@@ -200,15 +221,7 @@ export default function JobDetailPage() {
               )}
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <Badge
-                className={
-                  isExpired
-                    ? 'bg-destructive/10 text-destructive border-destructive/20'
-                    : 'bg-green-100 text-green-800 border-green-200'
-                }
-              >
-                {isExpired ? 'Expired' : 'Active'}
-              </Badge>
+              {statusBadge()}
               {job.industry && <Badge variant="outline">{job.industry}</Badge>}
               {user && !isEditing && (
                 <Button variant="outline" onClick={() => setIsEditing(true)}>
@@ -270,6 +283,13 @@ export default function JobDetailPage() {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <Building className="h-4 w-4" />
+                    Branch
+                  </label>
+                  <p className="mt-1">{job.branch || 'Not specified'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                     <Tag className="h-4 w-4" />
                     Job Type
                   </label>
@@ -293,7 +313,13 @@ export default function JobDetailPage() {
                   <p className="mt-1">{genderLabels[job.gender_requirement] || 'Any'}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Age Range</label>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <CircleDot className="h-4 w-4" />
+                    Status
+                  </label>
+                  <p className="mt-1 capitalize">{job.status || 'active'}</p>
+                </div>
+                <div>
                   <p className="mt-1">{formatAgeRange()}</p>
                 </div>
                 <div>
