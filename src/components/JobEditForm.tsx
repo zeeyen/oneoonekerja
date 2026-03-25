@@ -38,6 +38,9 @@ export interface JobEditFormData {
   url: string;
   postcode: string;
   location_address: string;
+  branch: string;
+  status: string;
+  job_type: string;
 }
 
 interface JobEditFormProps {
