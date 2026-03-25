@@ -1,22 +1,43 @@
 
 
-## Fix: Add "Job ID" Header Alias
+## Execute Bulk Import: 202 CSV Rows → Jobs Database
 
-### Problem
-The new CSV format uses the header **"Job ID"** (with a space). The alias map only has `'job_id'` (underscore). During parsing, headers are lowercased to `"job id"`, which has no match in `HEADER_ALIAS_MAP` — so `external_job_id` is never populated, breaking duplicate detection entirely.
+### Critical Issue to Fix
+The current `useBulkImportJobs.ts` **skips** rows with `cancelled`/`completed` status (lines 279-282, 400-405). This means ~147 jobs that need their status updated to `completed`/`cancelled` would be ignored. The one-time script must process ALL rows regardless of status.
 
-### Fix
-Add one line to `HEADER_ALIAS_MAP` in `src/hooks/useBulkImportJobs.ts`:
+### Approach
+Run a Python script via `psql` that:
+1. Reads the uploaded CSV (202 rows)
+2. Fetches existing jobs by `external_job_id` 
+3. Fetches `malaysia_locations` for geocoding
+4. For each row, applies the same transformations as `useBulkImportJobs.ts`:
+   - Gender: `""` → `female`, `"1"` → `male`, `"2"` → `any`
+   - Status: lowercase as-is (`open`, `active`, `completed`, `cancelled`)
+   - Dates: already `YYYY-MM-DD`
+   - Location resolution against `malaysia_locations`
+5. **Updates** existing jobs (all changed fields including status, branch, job_type, location, url, salary, gender, ages)
+6. **Inserts** new jobs
+7. Outputs summary
 
-```
-'job id': 'job_id',
-```
+### Expected Results
 
-Also add `'job type': 'job_type'` and `'end date': 'end_date'` since the new CSV likely uses spaces in those headers too.
+| Action | Count | Details |
+|---|---|---|
+| Updates | ~181 | Existing jobs get branch, status, job_type, and other field updates |
+| Inserts | ~21 | New jobs added (gap job IDs not yet in DB) |
+| Status → completed | ~140 | Hidden from bot |
+| Status → cancelled | ~7 | Hidden from bot |
+| Status → active/open | ~55 | Visible to applicants |
 
-### Files Changed
+### Script Details
+- Single Python script at `/tmp/import_jobs.py`
+- Uses `psql` for DB access (env vars already set)
+- Reuses same CSV parsing logic (handles quoted fields, multiline values)
+- Processes ALL rows (no status-based skipping)
+- Dry-run output first, then executes
 
+### Files
 | File | Change |
 |---|---|
-| `src/hooks/useBulkImportJobs.ts` | Add `'job id': 'job_id'`, `'job type': 'job_type'`, `'end date': 'end_date'` to `HEADER_ALIAS_MAP` |
+| `/tmp/import_jobs.py` | One-time import script (not part of codebase) |
 
