@@ -28,6 +28,8 @@ import {
   Pencil,
   Hash,
   Tag,
+  Building,
+  CircleDot,
 } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 import { JobEditForm, type JobEditFormData } from '@/components/JobEditForm';
