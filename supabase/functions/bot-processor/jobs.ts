@@ -88,6 +88,7 @@ export async function findAndPresentJobsConversational(user: User, radiusKm: num
     .from('jobs')
     .select('*')
     .gte('expire_by', today)
+    .or('status.eq.open,status.eq.active,status.is.null')
 
   if (user.gender) {
     query = query.or(`gender_requirement.eq.any,gender_requirement.eq.${user.gender}`)

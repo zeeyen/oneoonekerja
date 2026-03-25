@@ -57,6 +57,8 @@ export interface Job {
   postcode: string | null;
   country: string | null;
   job_type: string | null;
+  branch: string | null;
+  status: string | null;
 }
 
 export interface Conversation {

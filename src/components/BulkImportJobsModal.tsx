@@ -18,7 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Upload, Download, CheckCircle2, AlertTriangle, XCircle, FileText, Sparkles, Ban, RefreshCw } from 'lucide-react';
+import { Upload, Download, CheckCircle2, AlertTriangle, XCircle, FileText, Sparkles, Ban, RefreshCw, SkipForward } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import {
   useBulkImportJobs,
@@ -96,13 +96,13 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
     }
   }, [resolveWithAi, parsedRows]);
 
-  const newCount = parsedRows.filter((r) => r.errors.length === 0 && !r.isExisting).length;
-  const updateCount = parsedRows.filter((r) => r.isExisting && r.hasLocationChanges).length;
-  const existingCount = parsedRows.filter((r) => r.isExisting && !r.hasLocationChanges).length;
-  const errorCount = parsedRows.filter((r) => r.errors.length > 0).length;
+  const newCount = parsedRows.filter((r) => r.errors.length === 0 && !r.isExisting && !r.skipped).length;
+  const updateCount = parsedRows.filter((r) => r.isExisting && r.hasLocationChanges && !r.skipped).length;
+  const existingCount = parsedRows.filter((r) => r.isExisting && !r.hasLocationChanges && !r.skipped).length;
+  const errorCount = parsedRows.filter((r) => r.errors.length > 0 && !r.skipped).length;
+  const skippedCount = parsedRows.filter((r) => r.skipped).length;
   const unresolvedCount = parsedRows.filter((r) => {
-    if (r.locationResolved || r.errors.length > 0) return false;
-    // New rows or existing rows with location changes
+    if (r.locationResolved || r.errors.length > 0 || r.skipped) return false;
     return !r.isExisting || r.hasLocationChanges;
   }).length;
   const aiResolvedCount = parsedRows.filter((r) => r.resolutionMethod === 'ai').length;
@@ -114,7 +114,7 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
       const parts: string[] = [];
       if (result.inserted > 0) parts.push(`${result.inserted} new jobs imported`);
       if (result.updated > 0) parts.push(`${result.updated} existing jobs updated`);
-      if (result.skipped > 0) parts.push(`${result.skipped} unchanged skipped`);
+      if (result.skipped > 0) parts.push(`${result.skipped} unchanged/skipped`);
       if (result.locationWarnings > 0) parts.push(`${result.locationWarnings} without coordinates`);
       toast({
         title: 'Import complete',
@@ -140,7 +140,7 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={busy ? undefined : onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
+      <DialogContent className="max-w-5xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Bulk Import Jobs</DialogTitle>
         </DialogHeader>
@@ -200,6 +200,11 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
                   {existingCount} unchanged
                 </Badge>
               )}
+              {skippedCount > 0 && (
+                <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">
+                  {skippedCount} skipped
+                </Badge>
+              )}
               {errorCount > 0 && (
                 <Badge variant="destructive">{errorCount} errors</Badge>
               )}
@@ -250,10 +255,12 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
                     <TableHead>Title</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Company</TableHead>
+                    <TableHead>Branch</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead className="w-16">Geo</TableHead>
                     <TableHead>Expires</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Job Status</TableHead>
+                    <TableHead>Import</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -261,7 +268,9 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
                     <TableRow
                       key={row.rowNumber}
                       className={
-                        row.errors.length > 0
+                        row.skipped
+                          ? 'bg-orange-50 dark:bg-orange-950/20 opacity-60'
+                          : row.errors.length > 0
                           ? 'bg-destructive/5'
                           : row.isExisting && row.hasLocationChanges
                           ? 'bg-blue-50 dark:bg-blue-950/30'
@@ -276,7 +285,8 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
                         {row.raw.job_title || <span className="text-muted-foreground italic">empty</span>}
                       </TableCell>
                       <TableCell className="text-sm">{row.raw.job_type || '-'}</TableCell>
-                      <TableCell className="max-w-[150px] truncate">{row.raw.company_name || '-'}</TableCell>
+                      <TableCell className="max-w-[120px] truncate">{row.raw.company_name || '-'}</TableCell>
+                      <TableCell className="text-sm max-w-[100px] truncate">{row.raw.branch || '-'}</TableCell>
                       <TableCell className="text-sm">
                         {row.raw.city || row.raw.state
                           ? `${row.raw.city}${row.raw.city && row.raw.state ? ', ' : ''}${row.raw.state}`
@@ -294,8 +304,29 @@ export function BulkImportJobsModal({ open, onOpenChange }: Props) {
                         )}
                       </TableCell>
                       <TableCell className="text-sm">{row.raw.end_date || '-'}</TableCell>
+                      <TableCell className="text-sm">
+                        {row.raw.status ? (
+                          <Badge
+                            variant="outline"
+                            className={
+                              row.skipped
+                                ? 'border-orange-300 text-orange-700 dark:text-orange-400'
+                                : 'border-green-300 text-green-700 dark:text-green-400'
+                            }
+                          >
+                            {row.raw.status}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
                       <TableCell>
-                        {row.errors.length > 0 ? (
+                        {row.skipped ? (
+                          <div className="flex items-center gap-1 text-orange-600 dark:text-orange-400 text-xs">
+                            <SkipForward className="h-3 w-3 shrink-0" />
+                            <span>Skipped</span>
+                          </div>
+                        ) : row.errors.length > 0 ? (
                           <div className="flex items-center gap-1 text-destructive text-xs">
                             <XCircle className="h-3 w-3 shrink-0" />
                             <span className="truncate max-w-[150px]">{row.errors[0]}</span>

@@ -89,6 +89,7 @@ export async function handleShortcodeSearch(
     .from('jobs')
     .select('*')
     .gte('expire_by', today)
+    .or('status.eq.open,status.eq.active,status.is.null')
 
   if (type === 'geo') {
     // Search location_city, location_address, location_state
