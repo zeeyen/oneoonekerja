@@ -66,6 +66,9 @@ export function JobEditForm({ job, onSave, onCancel, isSaving }: JobEditFormProp
     url: job.url || '',
     postcode: job.postcode || '',
     location_address: job.location_address || '',
+    branch: job.branch || '',
+    status: job.status || 'active',
+    job_type: job.job_type || '',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
