@@ -1,29 +1,33 @@
 
 
-## Add Branch, Status, Job Type, and End Date to Job Detail & Edit Form
+## Add Tracking Parameters to Job URLs in Bot Messages
 
 ### Summary
-Display **Branch** and **Status** in the job detail view, and make **Branch**, **Status**, **Job Type**, and **End Date** (expire_by) editable in the edit form. End Date is already editable; the other three are not.
+Append `?source=chatbot&source_id=<applicant UUID>` to job URLs displayed during chat. No database changes needed — this is display-only at message generation time.
 
-### Changes
+### Helper Function
+Create a utility function `appendTracking(url: string, userId: string): string` that appends tracking query params, handling URLs that may already have a `?` query string.
 
-#### 1. `src/pages/JobDetailPage.tsx` — Add Branch & Status to detail view
-- Add **Branch** field to left column (with a building/store icon) showing `job.branch || 'Not specified'`
-- Add **Status** field to right column showing `job.status` as a styled badge (active/open = green, completed = gray, cancelled = red)
-- Update the header badge to use `job.status` instead of just expired/active logic
-- Add `status` and `branch` to the `handleSave` update payload
+### Files to Change
 
-#### 2. `src/components/JobEditForm.tsx` — Add Branch, Status, Job Type fields
-- Add `branch`, `status`, and `job_type` to `JobEditFormData` interface
-- Initialize them from `job` props
-- Add **Branch** text input field
-- Add **Status** select dropdown with options: `active`, `open`, `completed`, `cancelled`
-- Add **Job Type** text input field
-- End Date (`expire_by`) is already editable — no change needed
+| File | Change |
+|---|---|
+| `supabase/functions/bot-processor/helpers.ts` | Add `appendTracking(url, userId)` helper |
+| `supabase/functions/bot-processor/jobs.ts` | In `formatJobsMessage`: pass `userId` param, apply tracking to `applyUrl` (line ~290). Update `findAndPresentJobsConversational` to pass `user.id` through to `formatJobsMessage` |
+| `supabase/functions/bot-processor/matching.ts` | In job selection handler (line ~177): apply tracking to `applyUrl` before displaying and saving |
+| `supabase/functions/bot-processor/shortcode.ts` | Apply tracking to shortcode job URLs if applicable |
 
-#### 3. `src/pages/JobDetailPage.tsx` — Include new fields in save payload
-- Add `branch`, `status`, `job_type` to the `supabase.update()` call in `handleSave`
+### Helper Logic
+```typescript
+export function appendTracking(url: string, userId: string): string {
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}source=chatbot&source_id=${userId}`
+}
+```
 
-### Status Options
-`active`, `open`, `completed`, `cancelled` — matching the values from the bulk import.
+### Key Points
+- `formatJobsMessage` currently doesn't receive `userId` — signature updated to accept it
+- Tracking URL is what gets displayed AND saved to `job_selections.apply_url` (so the landing site can attribute the click)
+- The `last_selected_job.url` in conversation state will also contain the tracked URL for consistency
+- No changes to the `jobs` table
 
