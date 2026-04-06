@@ -155,7 +155,7 @@ export async function handleShortcodeSearch(
   }))
 
   const hasProfile = user.full_name && user.age && user.gender
-  const jobsMessage = formatJobsMessage(matchedJobs, 0, lang)
+  const jobsMessage = formatJobsMessage(matchedJobs, 0, lang, user.id)
 
   const searchTypeLabel = type === 'geo'
     ? getText(lang, {
