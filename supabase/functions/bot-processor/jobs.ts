@@ -1,5 +1,5 @@
 import { supabase } from './config.ts'
-import { getText, getEscalationFooter } from './helpers.ts'
+import { getText, getEscalationFooter, appendTracking } from './helpers.ts'
 import type { User, MatchedJob } from './types.ts'
 import { calculateDistance, geocodeUserLocation } from './location.ts'
 import { getUserJobSelections } from './job-selections.ts'
@@ -214,7 +214,7 @@ export async function findAndPresentJobsConversational(user: User, radiusKm: num
     branch: s.job.branch
   }))
 
-  const message = formatJobsMessage(topJobs, 0, lang)
+  const message = formatJobsMessage(topJobs, 0, lang, user.id)
 
   return { message, jobs: topJobs }
 }
@@ -239,7 +239,7 @@ export function buildPostSearchState(matchResult: { jobs: MatchedJob[], noJobsAt
 // ============================================
 // FORMAT JOBS MESSAGE (Running numbers)
 // ============================================
-export function formatJobsMessage(jobs: MatchedJob[], startIndex: number, language: string): string {
+export function formatJobsMessage(jobs: MatchedJob[], startIndex: number, language: string, userId?: string): string {
   const lang = {
     ms: {
       header: "Ni kerja2 yg sesuai:",
@@ -287,7 +287,8 @@ export function formatJobsMessage(jobs: MatchedJob[], startIndex: number, langua
     const jobNumber = startIndex + index + 1 // Running number
     const location = [job.location_city, job.location_state].filter(Boolean).join(', ') || 'Flexible'
     const salary = job.salary_range || getText(language, { ms: 'Gaji negotiate', en: 'Negotiable', zh: '面议' })
-    const applyUrl = job.url || `https://101kerja.com/job/${job.id}`
+    const rawUrl = job.url || `https://101kerja.com/job/${job.id}`
+    const applyUrl = userId ? appendTracking(rawUrl, userId) : rawUrl
 
     const displayTitle = job.external_job_id ? `${job.title} (${job.external_job_id})` : job.title
     message += `*${jobNumber}. ${displayTitle}*\n`

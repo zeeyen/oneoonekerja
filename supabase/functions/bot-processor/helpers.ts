@@ -87,6 +87,14 @@ export function resolveMirroredLanguage(message: string, currentLang: string = '
 // ============================================
 // ESCALATION FOOTER — Human contact info
 // ============================================
+// ============================================
+// TRACKING URL — Append source params for attribution
+// ============================================
+export function appendTracking(url: string, userId: string): string {
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}source=chatbot&source_id=${userId}`
+}
+
 export function getEscalationFooter(lang: string): string {
   return getText(lang, {
     ms: `\n\n💬 Perlukan bantuan? Hubungi kami:\n📱 WhatsApp: wa.me/60162066861\n📧 Email: info@101kerja.com`,

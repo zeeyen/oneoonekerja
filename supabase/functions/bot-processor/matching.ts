@@ -1,5 +1,5 @@
 import { supabase, AGENCY_BASE_URL } from './config.ts'
-import { getText, getEscalationFooter } from './helpers.ts'
+import { getText, getEscalationFooter, appendTracking } from './helpers.ts'
 import type { User, MatchedJob } from './types.ts'
 import { addToRecentMessages } from './conversation.ts'
 import type { RecentMessage } from './conversation.ts'
@@ -173,8 +173,9 @@ export async function handleMatchingConversational(
     const selectedJob = matchedJobs[jobIndex]
 
     if (selectedJob) {
-      // Simple apply URL (no JWT token needed)
-      const applyUrl = selectedJob.url || `${AGENCY_BASE_URL}/${selectedJob.id}`
+      // Simple apply URL with tracking params
+      const rawUrl = selectedJob.url || `${AGENCY_BASE_URL}/${selectedJob.id}`
+      const applyUrl = appendTracking(rawUrl, user.id)
 
       const location = [selectedJob.location_city, selectedJob.location_state].filter(Boolean).join(', ')
       const salary = selectedJob.salary_range || getText(lang, { ms: 'Gaji negotiate', en: 'Salary negotiable', zh: '薪资面议' })
@@ -242,7 +243,7 @@ export async function handleMatchingConversational(
       updated_at: new Date().toISOString()
     }).eq('id', user.id)
 
-    const jobsMessage = formatJobsMessage(matchedJobs, newIndex, lang)
+    const jobsMessage = formatJobsMessage(matchedJobs, newIndex, lang, user.id)
     return {
       response: jobsMessage,
       updatedUser: { ...user, conversation_state: newConvState }
@@ -314,7 +315,7 @@ export async function handleMatchingConversational(
     }
 
     // Always append current job page so user can see & select
-    const jobsDisplayQ = formatJobsMessage(matchedJobs, currentIndex, lang)
+    const jobsDisplayQ = formatJobsMessage(matchedJobs, currentIndex, lang, user.id)
     gptResp = `${gptResp}\n\n${jobsDisplayQ}`
 
     const updatedRecent = addToRecentMessages(convState, message, gptResp)
@@ -337,7 +338,7 @@ export async function handleMatchingConversational(
     }
 
     // Always append current job page so user can see & select
-    const jobsDisplayP = formatJobsMessage(matchedJobs, currentIndex, lang)
+    const jobsDisplayP = formatJobsMessage(matchedJobs, currentIndex, lang, user.id)
     gptResp = `${gptResp}\n\n${jobsDisplayP}`
 
     const updatedRecent = addToRecentMessages(convState, message, gptResp)
@@ -358,7 +359,7 @@ export async function handleMatchingConversational(
     let gptResp = await generateKakAniResponse(user, message, ctx, recentMsgsMatch)
 
     // Always append current job page so user can see & select
-    const jobsDisplayF = formatJobsMessage(matchedJobs, currentIndex, lang)
+    const jobsDisplayF = formatJobsMessage(matchedJobs, currentIndex, lang, user.id)
     gptResp = `${gptResp}\n\n${jobsDisplayF}`
 
     const updatedRecent = addToRecentMessages(convState, message, gptResp)

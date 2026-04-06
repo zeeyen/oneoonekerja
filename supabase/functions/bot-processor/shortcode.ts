@@ -1,5 +1,5 @@
 import { supabase } from './config.ts'
-import { getText, getEscalationFooter } from './helpers.ts'
+import { getText, getEscalationFooter, appendTracking } from './helpers.ts'
 import type { User, MatchedJob } from './types.ts'
 import { formatJobsMessage } from './jobs.ts'
 
@@ -155,7 +155,7 @@ export async function handleShortcodeSearch(
   }))
 
   const hasProfile = user.full_name && user.age && user.gender
-  const jobsMessage = formatJobsMessage(matchedJobs, 0, lang)
+  const jobsMessage = formatJobsMessage(matchedJobs, 0, lang, user.id)
 
   const searchTypeLabel = type === 'geo'
     ? getText(lang, {
