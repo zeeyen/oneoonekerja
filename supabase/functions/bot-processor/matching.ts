@@ -359,7 +359,7 @@ export async function handleMatchingConversational(
     let gptResp = await generateKakAniResponse(user, message, ctx, recentMsgsMatch)
 
     // Always append current job page so user can see & select
-    const jobsDisplayF = formatJobsMessage(matchedJobs, currentIndex, lang)
+    const jobsDisplayF = formatJobsMessage(matchedJobs, currentIndex, lang, user.id)
     gptResp = `${gptResp}\n\n${jobsDisplayF}`
 
     const updatedRecent = addToRecentMessages(convState, message, gptResp)
