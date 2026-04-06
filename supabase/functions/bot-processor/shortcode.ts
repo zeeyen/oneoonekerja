@@ -1,5 +1,5 @@
 import { supabase } from './config.ts'
-import { getText, getEscalationFooter } from './helpers.ts'
+import { getText, getEscalationFooter, appendTracking } from './helpers.ts'
 import type { User, MatchedJob } from './types.ts'
 import { formatJobsMessage } from './jobs.ts'
 
