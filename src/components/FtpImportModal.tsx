@@ -2,7 +2,6 @@ import { useState, useCallback } from 'react';
 import { format } from 'date-fns';
 import { CalendarIcon, ServerCrash, Download, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/lib/supabase';
 import { toast } from '@/hooks/use-toast';
 import {
   Dialog,
