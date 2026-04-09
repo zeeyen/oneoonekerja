@@ -43,7 +43,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
-import { Search, Briefcase, ExternalLink, Upload, MapPin, BarChart3, MousePointerClick } from 'lucide-react';
+import { Search, Briefcase, ExternalLink, Upload, MapPin, BarChart3, MousePointerClick, ServerCrash } from 'lucide-react';
 import { format, parseISO, isPast } from 'date-fns';
 import { useDebounce } from '@/hooks/useDebounce';
 
@@ -73,6 +73,7 @@ export default function JobsPage() {
   const [jobTypeFilter, setJobTypeFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [ftpImportOpen, setFtpImportOpen] = useState(false);
   const [activeWidget, setActiveWidget] = useState<ActiveWidget>(null);
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
 
@@ -219,6 +220,10 @@ export default function JobsPage() {
                 : `Backfill Coordinates (${unresolvedCount})`}
             </Button>
           )}
+          <Button variant="outline" onClick={() => setFtpImportOpen(true)}>
+            <ServerCrash className="h-4 w-4 mr-2" />
+            FTP Import
+          </Button>
           <Button variant="outline" onClick={() => setBulkImportOpen(true)}>
             <Upload className="h-4 w-4 mr-2" />
             Bulk Import
@@ -241,6 +246,7 @@ export default function JobsPage() {
       )}
 
       <BulkImportJobsModal open={bulkImportOpen} onOpenChange={setBulkImportOpen} />
+      <FtpImportModal open={ftpImportOpen} onOpenChange={setFtpImportOpen} />
 
       {/* Stat Widgets */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
