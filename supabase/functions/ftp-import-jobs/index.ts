@@ -307,19 +307,30 @@ Deno.serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    let dateStr = url.searchParams.get("date");
+    const dateParam = url.searchParams.get("date");
 
-    // Default to today in MYT (UTC+8)
-    if (!dateStr) {
-      const now = new Date();
-      const myt = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-      const yy = String(myt.getUTCFullYear()).slice(-2);
-      const mm = String(myt.getUTCMonth() + 1).padStart(2, "0");
-      const dd = String(myt.getUTCDate()).padStart(2, "0");
-      dateStr = `${yy}${mm}${dd}`;
+    let dateStr: string;
+    let fileName: string;
+
+    if (dateParam) {
+      dateStr = dateParam;
+      fileName = `Jobs_${dateStr}.csv`;
+    } else {
+      console.log("No date param — listing /production/ to find latest file...");
+      const listing = await ftpListDirectory("/production/");
+      console.log("Directory listing:", listing);
+      const latest = findLatestJobsFile(listing);
+      if (!latest) {
+        return new Response(
+          JSON.stringify({ error: "No Jobs_YYMMDD.csv files found in /production/" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      fileName = latest.fileName;
+      dateStr = latest.dateStr;
+      console.log(`Resolved latest file: ${fileName}`);
     }
 
-    const fileName = `Jobs_${dateStr}.csv`;
     const remotePath = `/production/${fileName}`;
 
     console.log(`Downloading ${remotePath} from FTP...`);
