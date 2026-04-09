@@ -37,6 +37,55 @@ function parsePasvPort(response: string): { host: string; port: number } {
   return { host, port };
 }
 
+async function ftpListDirectory(dirPath: string): Promise<string> {
+  const conn = await Deno.connect({ hostname: FTP_HOST, port: 21 });
+  try {
+    await ftpReadResponse(conn);
+    let resp = await ftpCommand(conn, `USER ${FTP_USER}`);
+    if (!resp.startsWith("331") && !resp.startsWith("230")) throw new Error("FTP USER failed: " + resp);
+    resp = await ftpCommand(conn, `PASS ${FTP_PASS}`);
+    if (!resp.startsWith("230")) throw new Error("FTP PASS failed: " + resp);
+    resp = await ftpCommand(conn, "PASV");
+    if (!resp.startsWith("227")) throw new Error("FTP PASV failed: " + resp);
+    const { host: dataHost, port: dataPort } = parsePasvPort(resp);
+    const dataConn = await Deno.connect({ hostname: dataHost, port: dataPort });
+    resp = await ftpCommand(conn, `LIST ${dirPath}`);
+    if (!resp.startsWith("150") && !resp.startsWith("125")) {
+      dataConn.close();
+      throw new Error("FTP LIST failed: " + resp);
+    }
+    const chunks: Uint8Array[] = [];
+    while (true) {
+      const buf = new Uint8Array(65536);
+      const n = await dataConn.read(buf);
+      if (n === null) break;
+      chunks.push(buf.subarray(0, n));
+    }
+    dataConn.close();
+    await ftpReadResponse(conn);
+    await ftpCommand(conn, "QUIT");
+    const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+    const merged = new Uint8Array(totalLen);
+    let offset = 0;
+    for (const c of chunks) { merged.set(c, offset); offset += c.length; }
+    return new TextDecoder().decode(merged);
+  } finally {
+    try { conn.close(); } catch { /* ignore */ }
+  }
+}
+
+function findLatestJobsFile(listing: string): { fileName: string; dateStr: string } | null {
+  const regex = /Jobs_(\d{6})\.csv/g;
+  const matches: { fileName: string; dateStr: string }[] = [];
+  let m;
+  while ((m = regex.exec(listing)) !== null) {
+    matches.push({ fileName: m[0], dateStr: m[1] });
+  }
+  if (matches.length === 0) return null;
+  matches.sort((a, b) => b.dateStr.localeCompare(a.dateStr));
+  return matches[0];
+}
+
 async function downloadFileFromFtp(remotePath: string): Promise<string> {
   const conn = await Deno.connect({ hostname: FTP_HOST, port: 21 });
   try {
@@ -258,19 +307,30 @@ Deno.serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    let dateStr = url.searchParams.get("date");
+    const dateParam = url.searchParams.get("date");
 
-    // Default to today in MYT (UTC+8)
-    if (!dateStr) {
-      const now = new Date();
-      const myt = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-      const yy = String(myt.getUTCFullYear()).slice(-2);
-      const mm = String(myt.getUTCMonth() + 1).padStart(2, "0");
-      const dd = String(myt.getUTCDate()).padStart(2, "0");
-      dateStr = `${yy}${mm}${dd}`;
+    let dateStr: string;
+    let fileName: string;
+
+    if (dateParam) {
+      dateStr = dateParam;
+      fileName = `Jobs_${dateStr}.csv`;
+    } else {
+      console.log("No date param — listing /production/ to find latest file...");
+      const listing = await ftpListDirectory("/production/");
+      console.log("Directory listing:", listing);
+      const latest = findLatestJobsFile(listing);
+      if (!latest) {
+        return new Response(
+          JSON.stringify({ error: "No Jobs_YYMMDD.csv files found in /production/" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      fileName = latest.fileName;
+      dateStr = latest.dateStr;
+      console.log(`Resolved latest file: ${fileName}`);
     }
 
-    const fileName = `Jobs_${dateStr}.csv`;
     const remotePath = `/production/${fileName}`;
 
     console.log(`Downloading ${remotePath} from FTP...`);
