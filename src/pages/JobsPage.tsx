@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { ErrorFallback } from '@/components/ErrorFallback';
 import { TooltipHeader } from '@/components/TooltipHeader';
 import { BulkImportJobsModal } from '@/components/BulkImportJobsModal';
+import { FtpImportModal } from '@/components/FtpImportModal';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
