@@ -49,13 +49,6 @@ export function FtpImportModal({ open, onOpenChange }: Props) {
     const dateStr = `${yy}${mm}${dd}`;
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('ftp-import-jobs', {
-        body: null,
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      // supabase.functions.invoke doesn't support query params, so use fetch directly
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const fnUrl = `https://${projectId}.supabase.co/functions/v1/ftp-import-jobs?date=${dateStr}`;
