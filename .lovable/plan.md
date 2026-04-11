@@ -1,30 +1,30 @@
 
 
-## Pick Up Latest File from FTP Instead of Today's Date
+## Set Up pg_cron Schedule for Daily FTP Import
 
-### Problem
-The scheduled job currently constructs a filename using today's date. Since files are uploaded at end of business day and picked up at 7am the next morning, we need to find the **latest** `Jobs_YYMMDD.csv` file in the `/production/` folder rather than guessing the date.
+### What
+Register a cron job in Supabase that calls the `ftp-import-jobs` Edge Function every day at 7:00 AM MYT (23:00 UTC).
 
-### Approach
-When no `?date=` param is provided (i.e., the scheduled run), the function will:
-1. Connect to FTP and list files in `/production/`
-2. Filter filenames matching the pattern `Jobs_YYMMDD.csv`
-3. Sort by the date portion descending
-4. Download the most recent file
+### How
+Run the following SQL using the Supabase SQL insert tool (not a migration, since it contains project-specific URLs and keys):
 
-When `?date=` is provided (manual trigger), behavior stays the same — fetch that specific file.
+```sql
+SELECT cron.schedule(
+  'daily-ftp-import',
+  '0 23 * * *',
+  $$
+  SELECT net.http_post(
+    url:='https://gbvegikhzqxdxpldfdls.supabase.co/functions/v1/ftp-import-jobs',
+    headers:='{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdidmVnaWtoenF4ZHhwbGRmZGxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3NTU4MDIsImV4cCI6MjA4NTMzMTgwMn0.cnLYEJCYFH4NjMyarYziqkG9mN99KfeSvSlsZRJ96sE"}'::jsonb,
+    body:='{}'::jsonb
+  ) AS request_id;
+  $$
+);
+```
 
-### Changes
-
-**`supabase/functions/ftp-import-jobs/index.ts`**
-
-1. Add a new FTP helper `ftpListDirectory(remotePath)` that uses the `LIST` command in passive mode to get directory contents
-2. Add a parser `findLatestJobsFile(listing)` that extracts `Jobs_YYMMDD.csv` filenames, parses dates, and returns the most recent one
-3. Update the main handler: when no `?date=` param, call `ftpListDirectory("/production/")` then `findLatestJobsFile()` to determine which file to download, instead of constructing the filename from today's date
-
-### Key Details
-- The `LIST` FTP command returns a directory listing; we parse filenames with regex `/Jobs_(\d{6})\.csv/`
-- Date comparison uses the `YYMMDD` string directly (lexicographic sort works for same-century dates)
-- The manual trigger (`?date=YYMMDD`) bypasses directory listing entirely — no behavior change
-- Response JSON will include the resolved `fileName` so admins can see which file was picked up
+### Details
+- **Schedule**: `0 23 * * *` = 23:00 UTC = 7:00 AM MYT (UTC+8)
+- **No date param**: The function will automatically list the FTP `/production/` folder and pick up the latest `Jobs_YYMMDD.csv` file
+- Uses the anon key for authorization (the Edge Function doesn't require service role access for this endpoint)
+- After setup, verify with `SELECT * FROM cron.job;` to confirm registration
 
