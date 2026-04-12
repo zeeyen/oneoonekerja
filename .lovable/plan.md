@@ -1,30 +1,57 @@
 
 
-## Update Escalation Footer and System Prompt for Friendlier Tone
+## Add Salary Display Helper for Marketing Optimization
 
 ### Changes
 
-**1. helpers.ts — Update getEscalationFooter messages (lines 100-102)**
+**1. jobs.ts — Add displaySalary helper and update usage**
 
-Replace the three language strings with friendlier, more casual versions:
-
+- Insert helper function before `formatJobsMessage` (around line 239):
 ```typescript
-ms: `\n\nKalau ada apa-apa, boleh je WhatsApp kitorang ye:\n📱 wa.me/60162066861\n📧 info@101kerja.com`,
-en: `\n\nIf you need anything, just reach out to us anytime:\n📱 wa.me/60162066861\n📧 info@101kerja.com`,
-zh: `\n\n有什么需要随时联系我们哦：\n📱 wa.me/60162066861\n📧 info@101kerja.com`
+function displaySalary(salaryRange: string): string {
+  const rangeMatch = salaryRange.match(/RM\s*[\d,.]+\s*-\s*(RM\s*[\d,.]+\/\w+)/)
+  if (rangeMatch) {
+    return rangeMatch[1]
+  }
+  return salaryRange
+}
 ```
 
-**2. config.ts — Update rule #7 in KAK_ANI_SYSTEM_PROMPT (line 41)**
+- Update line 289 from:
+```typescript
+const salary = job.salary_range || getText(language, { ms: 'Gaji negotiate', en: 'Negotiable', zh: '面议' })
+```
+to:
+```typescript
+const salary = (job.salary_range ? displaySalary(job.salary_range) : null) || getText(language, { ms: 'Gaji negotiate', en: 'Negotiable', zh: '面议' })
+```
 
-Change from:
-```
-7. Kalau user minta bercakap dengan manusia/admin/support/human, atau minta nombor telefon/contact, WAJIB beri info ni:\n   📱 WhatsApp: wa.me/60162066861\n   📧 Email: info@101kerja.com\n   Jangan elak atau deflect - terus bagi contact.
+**2. matching.ts — Add displaySalary helper and update usage**
+
+- Insert helper function after imports (around line 13):
+```typescript
+function displaySalary(salaryRange: string): string {
+  const rangeMatch = salaryRange.match(/RM\s*[\d,.]+\s*-\s*(RM\s*[\d,.]+\/\w+)/)
+  if (rangeMatch) {
+    return rangeMatch[1]
+  }
+  return salaryRange
+}
 ```
 
-To:
+- Update line 181 from:
+```typescript
+const salary = selectedJob.salary_range || getText(lang, { ms: 'Gaji negotiate', en: 'Salary negotiable', zh: '薪资面议' })
 ```
-7. Kalau user minta bercakap dengan manusia/admin/support/human, atau minta nombor telefon/contact, bagi info ni dengan cara yang mesra dan manja:\n   📱 WhatsApp: wa.me/60162066861\n   📧 Email: info@101kerja.com\n   Jangan elak atau deflect. Bagi contact terus, tapi cara Kak Ani - santai dan caring.
+to:
+```typescript
+const salary = (selectedJob.salary_range ? displaySalary(selectedJob.salary_range) : null) || getText(lang, { ms: 'Gaji negotiate', en: 'Salary negotiable', zh: '薪资面议' })
 ```
+
+### Impact
+- Ranges like "RM 102.00 - RM 120.00/day" → displays "RM 120.00/day"
+- Single values like "RM 110.00/day" → unchanged ("RM 110.00/day")
+- Marketing benefit: Higher end of range attracts more applicants
 
 ### Deployment
 Redeploy the `bot-processor` Edge Function after both edits.
