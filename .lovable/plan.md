@@ -1,25 +1,17 @@
 
 
-## Fix: Allow DB Lookup for Ambiguous Locations
-
-### Problem
-When GPT flags a location as ambiguous (e.g., "Segambut" → KL vs Selangor), the DB lookup is skipped entirely because of the condition `!merged.ambiguous`. But the `malaysia_locations` table has the correct answer (Segambut is only in KL). The DB lookup should always run so it can override GPT's false ambiguity when it finds the location in only one state.
+## Add Human Escalation Rule to Kak Ani System Prompt
 
 ### Change
-**File**: `supabase/functions/bot-processor/extraction.ts`
+**File**: `supabase/functions/bot-processor/config.ts`
 
-**Line 224**: Change from:
-```typescript
-if (merged.city && !merged.ambiguous) {
+**Line 40** — after rule #6, insert rule #7:
+
+```
+6. JANGAN guna emoji - buat natural macam manusia
+7. Kalau user minta bercakap dengan manusia/admin/support/human, atau minta nombor telefon/contact, WAJIB beri info ni:\n   📱 WhatsApp: wa.me/60162066861\n   📧 Email: info@101kerja.com\n   Jangan elak atau deflect - terus bagi contact.
 ```
 
-to:
-```typescript
-if (merged.city) {
-```
-
-### Impact
-- DB lookup now runs even when GPT marks a location as ambiguous
-- If the DB finds the city in only one state, it overrides the false ambiguity
-- If the DB confirms the city exists in multiple states, `ambiguous_states` is still returned and the ambiguity remains
+### Deployment
+Redeploy the `bot-processor` Edge Function after the edit.
 
