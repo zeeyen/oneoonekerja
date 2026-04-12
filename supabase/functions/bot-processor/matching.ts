@@ -11,6 +11,14 @@ import { saveJobSelection } from './job-selections.ts'
 import { findAndPresentJobsConversational, buildPostSearchState, formatJobsMessage, extractJobNumber, isMoreCommand } from './jobs.ts'
 import { normalizeInput } from './normalize.ts'
 
+function displaySalary(salaryRange: string): string {
+  const rangeMatch = salaryRange.match(/RM\s*[\d,.]+\s*-\s*(RM\s*[\d,.]+\/\w+)/)
+  if (rangeMatch) {
+    return rangeMatch[1]
+  }
+  return salaryRange
+}
+
 export async function handleMatchingConversational(
   user: User,
   message: string
@@ -178,7 +186,7 @@ export async function handleMatchingConversational(
       const applyUrl = appendTracking(rawUrl, user.id)
 
       const location = [selectedJob.location_city, selectedJob.location_state].filter(Boolean).join(', ')
-      const salary = selectedJob.salary_range || getText(lang, { ms: 'Gaji negotiate', en: 'Salary negotiable', zh: '薪资面议' })
+      const salary = (selectedJob.salary_range ? displaySalary(selectedJob.salary_range) : null) || getText(lang, { ms: 'Gaji negotiate', en: 'Salary negotiable', zh: '薪资面议' })
 
       // Save job selection to database
       await saveJobSelection(user.id, selectedJob, applyUrl)

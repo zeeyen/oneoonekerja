@@ -237,6 +237,17 @@ export function buildPostSearchState(matchResult: { jobs: MatchedJob[], noJobsAt
 }
 
 // ============================================
+// DISPLAY SALARY (show higher end of range)
+// ============================================
+function displaySalary(salaryRange: string): string {
+  const rangeMatch = salaryRange.match(/RM\s*[\d,.]+\s*-\s*(RM\s*[\d,.]+\/\w+)/)
+  if (rangeMatch) {
+    return rangeMatch[1]
+  }
+  return salaryRange
+}
+
+// ============================================
 // FORMAT JOBS MESSAGE (Running numbers)
 // ============================================
 export function formatJobsMessage(jobs: MatchedJob[], startIndex: number, language: string, userId?: string): string {
@@ -286,7 +297,7 @@ export function formatJobsMessage(jobs: MatchedJob[], startIndex: number, langua
   displayJobs.forEach((job, index) => {
     const jobNumber = startIndex + index + 1 // Running number
     const location = [job.location_city, job.location_state].filter(Boolean).join(', ') || 'Flexible'
-    const salary = job.salary_range || getText(language, { ms: 'Gaji negotiate', en: 'Negotiable', zh: '面议' })
+    const salary = (job.salary_range ? displaySalary(job.salary_range) : null) || getText(language, { ms: 'Gaji negotiate', en: 'Negotiable', zh: '面议' })
     const rawUrl = job.url || `https://101kerja.com/job/${job.id}`
     const applyUrl = userId ? appendTracking(rawUrl, userId) : rawUrl
 
