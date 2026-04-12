@@ -1,30 +1,25 @@
 
 
-## Set Up pg_cron Schedule for Daily FTP Import
+## Fix: Allow DB Lookup for Ambiguous Locations
 
-### What
-Register a cron job in Supabase that calls the `ftp-import-jobs` Edge Function every day at 7:00 AM MYT (23:00 UTC).
+### Problem
+When GPT flags a location as ambiguous (e.g., "Segambut" → KL vs Selangor), the DB lookup is skipped entirely because of the condition `!merged.ambiguous`. But the `malaysia_locations` table has the correct answer (Segambut is only in KL). The DB lookup should always run so it can override GPT's false ambiguity when it finds the location in only one state.
 
-### How
-Run the following SQL using the Supabase SQL insert tool (not a migration, since it contains project-specific URLs and keys):
+### Change
+**File**: `supabase/functions/bot-processor/extraction.ts`
 
-```sql
-SELECT cron.schedule(
-  'daily-ftp-import',
-  '0 23 * * *',
-  $$
-  SELECT net.http_post(
-    url:='https://gbvegikhzqxdxpldfdls.supabase.co/functions/v1/ftp-import-jobs',
-    headers:='{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdidmVnaWtoenF4ZHhwbGRmZGxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3NTU4MDIsImV4cCI6MjA4NTMzMTgwMn0.cnLYEJCYFH4NjMyarYziqkG9mN99KfeSvSlsZRJ96sE"}'::jsonb,
-    body:='{}'::jsonb
-  ) AS request_id;
-  $$
-);
+**Line 224**: Change from:
+```typescript
+if (merged.city && !merged.ambiguous) {
 ```
 
-### Details
-- **Schedule**: `0 23 * * *` = 23:00 UTC = 7:00 AM MYT (UTC+8)
-- **No date param**: The function will automatically list the FTP `/production/` folder and pick up the latest `Jobs_YYMMDD.csv` file
-- Uses the anon key for authorization (the Edge Function doesn't require service role access for this endpoint)
-- After setup, verify with `SELECT * FROM cron.job;` to confirm registration
+to:
+```typescript
+if (merged.city) {
+```
+
+### Impact
+- DB lookup now runs even when GPT marks a location as ambiguous
+- If the DB finds the city in only one state, it overrides the false ambiguity
+- If the DB confirms the city exists in multiple states, `ambiguous_states` is still returned and the ambiguity remains
 
