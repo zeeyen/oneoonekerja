@@ -221,7 +221,7 @@ Examples:
   }
 
   // HYBRID GEOCODING: Try malaysia_locations table first, then fall back to GPT
-  if (merged.city && !merged.ambiguous) {
+  if (merged.city) {
     const dbLookup = await lookupMalaysiaLocation(merged.city, merged.state || undefined)
     if (dbLookup) {
       if (Number.isFinite(dbLookup.lat) && Number.isFinite(dbLookup.lng)) {
